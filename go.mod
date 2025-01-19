@@ -6,17 +6,10 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/briandowns/spinner v1.23.1
 	github.com/ctreminiom/go-atlassian v1.6.1
-<<<<<<< HEAD
 	github.com/fatih/color v1.17.0
 	github.com/go-git/go-billy/v5 v5.6.1
 	github.com/go-git/go-git/v5 v5.13.1
 	github.com/google/generative-ai-go v0.17.0
-=======
-	github.com/fatih/color v1.18.0
-	github.com/go-git/go-billy/v5 v5.6.0
-	github.com/go-git/go-git/v5 v5.12.0
-	github.com/google/generative-ai-go v0.19.0
->>>>>>> 4e68121 (update sdk)
 	github.com/google/go-github/v61 v61.0.0
 	github.com/jhump/protoreflect v1.17.0
 	github.com/manifoldco/promptui v0.9.0
