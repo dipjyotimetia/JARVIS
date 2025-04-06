@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/google/go-github/v61/github"
+	"github.com/google/go-github/v70/github"
 )
 
-var owner = os.Getenv("GITHUB_OWNER")
-var repo = os.Getenv("GITHUB_REPO")
+var (
+	owner = os.Getenv("GITHUB_OWNER")
+	repo  = os.Getenv("GITHUB_REPO")
+)
 
 func (c *Client) ChekPR() (string, error) {
 	pr, _, err := c.client.PullRequests.List(c.ctx, owner, repo,
@@ -18,7 +20,8 @@ func (c *Client) ChekPR() (string, error) {
 			Head:        "main",
 			Sort:        "updated",
 			Direction:   "desc",
-			ListOptions: github.ListOptions{PerPage: 100}})
+			ListOptions: github.ListOptions{PerPage: 100},
+		})
 	if err != nil {
 		return "", err
 	}

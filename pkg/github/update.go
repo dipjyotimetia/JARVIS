@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/dipjyotimetia/jarvis/pkg/logger"
+	"github.com/schollz/progressbar/v3"
 )
 
 const (
@@ -76,7 +78,6 @@ func SelfUpdate(currentVersion string) error {
 	}
 
 	logger.Info("%s", fmt.Sprintf("New version found: %s (current: %s)", latestVersion.String(), current.String()))
-	logger.Info("Downloading the latest version...")
 
 	// Get the download URL
 	downloadURL, err := GetReleaseDownloadURL(latestVersion.String())
@@ -91,12 +92,63 @@ func SelfUpdate(currentVersion string) error {
 	}
 	defer os.Remove(tempFile.Name())
 
+	// Show extraction progress
+	extractBar := progressbar.NewOptions(
+		100,
+		progressbar.OptionSetDescription("Extracting"),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[yellow]=[reset]",
+			SaucerHead:    "[yellow]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+
+	// Start animation for extraction (indeterminate progress)
+	extractBar.RenderBlank()
+	go func() {
+		for range 100 {
+			extractBar.Add(1)
+			time.Sleep(50 * time.Millisecond)
+		}
+	}()
+
 	// Extract the binary from the archive
 	binPath, err := extractBinary(tempFile.Name())
+
+	// Complete the extraction progress bar
+	extractBar.Finish()
+	fmt.Println()
+
 	if err != nil {
 		return fmt.Errorf("extraction failed: %w", err)
 	}
 	defer os.Remove(binPath)
+
+	// Show installation progress
+	installBar := progressbar.NewOptions(
+		100,
+		progressbar.OptionSetDescription("Installing"),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[cyan]=[reset]",
+			SaucerHead:    "[cyan]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+
+	// Start animation for installation (indeterminate progress)
+	installBar.RenderBlank()
+	for i := 0; i < 100; i += 20 {
+		installBar.Add(20)
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	// Get the current executable path
 	executablePath, err := os.Executable()
@@ -106,6 +158,11 @@ func SelfUpdate(currentVersion string) error {
 
 	// Replace the current binary
 	err = replaceBinary(binPath, executablePath)
+
+	// Complete the installation progress bar
+	installBar.Finish()
+	fmt.Println()
+
 	if err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
@@ -116,7 +173,17 @@ func SelfUpdate(currentVersion string) error {
 
 // downloadToTempFile downloads a file from a URL to a temporary file
 func downloadToTempFile(url string) (*os.File, error) {
-	resp, err := http.Get(url)
+	// Send a HEAD request first to get the file size
+	resp, err := http.Head(url)
+	if err != nil {
+		return nil, err
+	}
+	resp.Body.Close()
+
+	fileSize := resp.ContentLength
+
+	// Now make the GET request for the actual download
+	resp, err = http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -131,12 +198,37 @@ func downloadToTempFile(url string) (*os.File, error) {
 		return nil, err
 	}
 
-	_, err = io.Copy(tmpFile, resp.Body)
+	// Create progress bar
+	bar := progressbar.NewOptions64(
+		fileSize,
+		progressbar.OptionSetDescription("Downloading"),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+
+	// Use io.TeeReader to copy data and update progress simultaneously
+	reader := io.TeeReader(resp.Body, bar)
+
+	// Copy from reader to file
+	_, err = io.Copy(tmpFile, reader)
 	if err != nil {
 		tmpFile.Close()
 		os.Remove(tmpFile.Name())
 		return nil, err
 	}
+
+	// Make sure to finish the bar
+	bar.Finish()
+	fmt.Println()
 
 	tmpFile.Close()
 	return tmpFile, nil
