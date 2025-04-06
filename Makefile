@@ -1,5 +1,5 @@
 VERSION = 0.0.3
-LDFLAGS = -ldflags="-X 'github.com/dipjyotimetia/jarvis/cmd/cmd.version=$(VERSION)'"
+LDFLAGS = -ldflags="-X 'github.com/dipjyotimetia/jarvis/cmd/cmd.Version=$(VERSION)'"
 OUTDIR = ./dist
 
 .PHONY: tidy

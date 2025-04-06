@@ -1,20 +1,22 @@
-version: 1
-
-before:
-  hooks:
-    - go mod tidy
+version: 2
 
 builds:
   - env:
       - CGO_ENABLED=0
-      - PROJECT_VERSION={{ .Version }}
     goos:
       - linux
       - windows
       - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X cmd.Version={{ .Version }}
+      - -X cmd.Commit={{ .Commit }}
+      - -X cmd.BuildDate={{ .Date }}
 
 archives:
-  - format: tar.gz
+  - formats: [ 'tar.gz' ]
     # this name template makes the OS and Arch compatible with the results of `uname`.
     name_template: >-
       {{ .ProjectName }}_
@@ -26,7 +28,7 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [ 'zip' ]
 
 changelog:
   sort: asc
@@ -34,3 +36,10 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+
+release:
+  github:
+    owner: dipjyotimetia
+    name: jarvis
+  prerelease: auto
+  draft: false
