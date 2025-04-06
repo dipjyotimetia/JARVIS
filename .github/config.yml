@@ -12,8 +12,6 @@ categories:
       - 'bug'
   - title: '✅ Tests'
     label: 'test'
-  - title: '⚡ Performance'
-    label: 'performance'
   - title: '📝 Documentation'
     label: 'docs'
   - title: '🔐 Security'
@@ -23,7 +21,9 @@ categories:
       - 'cicd'
       - 'tech'
   - title: '🤖 Dependencies'
-    label: 'dependencies'
+    collapse-after: 3
+    labels:
+      - 'dependencies'
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
 change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
 version-resolver:
@@ -38,6 +38,6 @@ version-resolver:
       - 'patch'
   default: patch
 template: |
-  ## Changes
+  ## What’s Changed
 
   $CHANGES
