@@ -1,6 +1,6 @@
 package github
 
-import "github.com/google/go-github/v61/github"
+import "github.com/google/go-github/v70/github"
 
 type Comment struct {
 	Id     int

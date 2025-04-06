@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,28 +13,52 @@ import (
 	"github.com/dipjyotimetia/jarvis/internal/db"
 	"github.com/dipjyotimetia/jarvis/internal/proxy"
 	"github.com/dipjyotimetia/jarvis/internal/web"
+	"github.com/dipjyotimetia/jarvis/pkg/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
+var timeout int
+
 var proxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Start the traffic inspector proxy server",
+	Long:  `Start the traffic inspector proxy server that can record, replay, and inspect HTTP traffic.`,
+	Example: `  # Run in normal mode
+  jarvis proxy
+  
+  # Run in recording mode
+  jarvis proxy --record
+  
+  # Run in replay mode
+  jarvis proxy --replay
+  
+  # Enable TLS support
+  jarvis proxy --tls --cert ./certs/server.crt --key ./certs/server.key`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, err := conf.LoadConfig(viper.GetViper())
 		if err != nil {
-			log.Fatalf("❌ Failed to load configuration: %v", err)
+			logger.Fatal("❌ Failed to load configuration: %v", err)
 		}
-		log.Printf("🔧 Configuration loaded: Mode=%s", getMode(cfg))
+		logger.Info("🔧 Configuration loaded: Mode=%s", getMode(cfg))
 
 		database, stmt, err := db.Initialize(cfg.SQLiteDBPath)
 		if err != nil {
-			log.Fatalf("❌ Failed to initialize database: %v", err)
+			logger.Fatal("❌ Failed to initialize database: %v", err)
 		}
 		defer database.Close()
 		defer stmt.Close()
 
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+		// Create context with timeout if specified
+		var ctx context.Context
+		var cancel context.CancelFunc
+
+		if timeout > 0 {
+			logger.Info("⏱️ Setting server timeout: %d minutes", timeout)
+			ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeout)*time.Minute)
+		} else {
+			ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+		}
 		defer cancel()
 
 		var wg sync.WaitGroup
@@ -86,15 +109,15 @@ var proxyCmd = &cobra.Command{
 					Handler: mux,
 				}
 
-				log.Printf("🌐 Starting web UI at http://localhost:%d/ui/", uiPort)
+				logger.Info("🌐 Starting web UI at http://localhost:%d/ui/", uiPort)
 				if err := uiServer.ListenAndServe(); err != http.ErrServerClosed {
-					log.Printf("⚠️ Web UI server error: %v", err)
+					logger.Error("⚠️ Web UI server error: %v", err)
 				}
 			}()
 		}
 
 		<-ctx.Done()
-		log.Println("🚨 Shutdown signal received, initiating graceful shutdown...")
+		logger.Info("🚨 Shutdown signal received, initiating graceful shutdown...")
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer shutdownCancel()
@@ -108,11 +131,11 @@ var proxyCmd = &cobra.Command{
 				if idx == 1 {
 					serverType = "HTTPS"
 				}
-				log.Printf("⏳ Shutting down %s server...", serverType)
+				logger.Info("⏳ Shutting down %s server...", serverType)
 				if err := srv.Shutdown(shutdownCtx); err != nil {
-					log.Printf("⚠️ %s server shutdown error: %v", serverType, err)
+					logger.Error("⚠️ %s server shutdown error: %v", serverType, err)
 				} else {
-					log.Printf("✅ %s server stopped gracefully", serverType)
+					logger.Info("✅ %s server stopped gracefully", serverType)
 				}
 			}(i, server)
 		}
@@ -122,11 +145,11 @@ var proxyCmd = &cobra.Command{
 			shutdownWg.Add(1)
 			go func() {
 				defer shutdownWg.Done()
-				log.Printf("⏳ Shutting down UI server...")
+				logger.Info("⏳ Shutting down UI server...")
 				if err := uiServer.Shutdown(shutdownCtx); err != nil {
-					log.Printf("⚠️ UI server shutdown error: %v", err)
+					logger.Error("⚠️ UI server shutdown error: %v", err)
 				} else {
-					log.Printf("✅ UI server stopped gracefully")
+					logger.Info("✅ UI server stopped gracefully")
 				}
 			}()
 		}
@@ -134,7 +157,7 @@ var proxyCmd = &cobra.Command{
 		shutdownWg.Wait()
 
 		wg.Wait()
-		log.Println("🏁 All servers stopped")
+		logger.Info("🏁 All servers stopped")
 	},
 }
 
@@ -158,6 +181,35 @@ func init() {
 	proxyCmd.Flags().Bool("validate-resp", true, "Validate responses against OpenAPI spec")
 	proxyCmd.Flags().Bool("strict-validation", false, "Enable strict validation mode")
 	proxyCmd.Flags().Bool("continue-on-error", false, "Continue processing even if validation fails")
+
+	// Add timeout flag
+	proxyCmd.Flags().IntVar(&timeout, "timeout", 0, "Timeout for the proxy server in minutes")
+
+	// Add validation for the timeout flag
+	proxyCmd.RegisterFlagCompletionFunc("timeout", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"5", "10", "30", "60"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// Add validation for UI and TLS ports
+	proxyCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		uiPort, _ := cmd.Flags().GetInt("ui-port")
+		tlsPort, _ := cmd.Flags().GetInt("tls-port")
+
+		if uiPort < 1024 || uiPort > 65535 {
+			return fmt.Errorf("ui-port must be between 1024 and 65535")
+		}
+
+		if tlsPort < 1024 || tlsPort > 65535 {
+			return fmt.Errorf("tls-port must be between 1024 and 65535")
+		}
+
+		// Validate that the ports don't conflict
+		if cmd.Flags().Changed("tls") && uiPort == tlsPort {
+			return fmt.Errorf("ui-port and tls-port cannot be the same")
+		}
+
+		return nil
+	}
 
 	viper.BindPFlag("ui_port", proxyCmd.Flags().Lookup("ui-port"))
 	viper.BindPFlag("recording_mode", proxyCmd.Flags().Lookup("record"))

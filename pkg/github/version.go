@@ -2,7 +2,6 @@ package github
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -16,19 +15,32 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 )
 
+// CheckVersion checks the latest version from GitHub repository
+// and prints it to stdout
 func CheckVersion() {
+	latestVersion, err := GetLatestVersion()
+	if err != nil {
+		fmt.Println("Error checking version:", err)
+		return
+	}
+
+	if latestVersion != nil {
+		fmt.Println("Latest Tag:", latestVersion.String())
+	}
+}
+
+// GetLatestVersion returns the latest version from GitHub repository
+func GetLatestVersion() (*semver.Version, error) {
 	usr, err := user.Current()
 	if err != nil {
-		fmt.Println("Error getting user information:", err)
-		return
+		return nil, fmt.Errorf("error getting user information: %w", err)
 	}
 
 	sshKeyPath := filepath.Join(usr.HomeDir, ".ssh", "id_ed25519")
 
 	sshAuth, err := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
 	if err != nil {
-		fmt.Println("Error loading SSH key:", err)
-		return
+		return nil, fmt.Errorf("error loading SSH key: %w", err)
 	}
 
 	repo, err := gogit.Clone(memory.NewStorage(), memfs.New(), &gogit.CloneOptions{
@@ -39,29 +51,30 @@ func CheckVersion() {
 		SingleBranch:  true,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("error cloning repository: %w", err)
 	}
 
 	tagrefs, err := repo.Tags()
 	if err != nil {
-		fmt.Println("Error getting tags:", err)
-		return
+		return nil, fmt.Errorf("error getting tags: %w", err)
 	}
 
 	versions := make([]*semver.Version, 0)
 	tagrefs.ForEach(func(t *plumbing.Reference) error {
 		tagName := t.Name().Short()
-		v := semver.MustParse(tagName)
-		versions = append(versions, v)
+		v, err := semver.NewVersion(tagName)
+		if err == nil {
+			versions = append(versions, v)
+		}
 		return nil
 	})
 
 	if len(versions) == 0 {
-		fmt.Println("No valid SemVer tags found.")
-		return
+		return nil, fmt.Errorf("no valid SemVer tags found")
 	}
 
 	sort.Sort(semver.Collection(versions))
-	latestTag := len(versions) - 1
-	fmt.Println("Latest Tag:", versions[latestTag].String())
+	latestTag := versions[len(versions)-1]
+
+	return latestTag, nil
 }

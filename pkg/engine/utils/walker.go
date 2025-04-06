@@ -70,7 +70,7 @@ func ProtoAnalyzer(protoFiles []string) error {
 	table.SetHeader([]string{"File", "Service", "Method", "Input Type", "Output Type", "Streaming"})
 	for _, protoFile := range protoFiles {
 		parser := protoparse.Parser{
-			//required for google proto files
+			// required for google proto files
 			ImportPaths:           []string{"."},
 			IncludeSourceCodeInfo: true,
 			InferImportPaths:      true,
@@ -107,7 +107,7 @@ func ProtoAnalyzer(protoFiles []string) error {
 }
 
 // generateGrpcurlCommand generates a grpcurl command for a given service and method
-func GrpCurlCommand(protoFile, serviceName, methodName string) {
+func GrpCurlCommand(protoFile, serviceName, methodName string) error {
 	var grpCurl string
 	parser := protoparse.Parser{
 		ImportPaths:           []string{"."},
@@ -117,7 +117,7 @@ func GrpCurlCommand(protoFile, serviceName, methodName string) {
 
 	fds, err := parser.ParseFiles(protoFile)
 	if err != nil {
-		fmt.Errorf("error parsing Proto file %s: %v", protoFile, err)
+		return fmt.Errorf("error parsing Proto file %s: %v", protoFile, err)
 	}
 
 	serviceFound := false
@@ -130,10 +130,10 @@ func GrpCurlCommand(protoFile, serviceName, methodName string) {
 					if method.GetName() == methodName {
 						message, err := createJSONRequestBody(method.GetInputType().AsDescriptorProto().GetField())
 						if err != nil {
-							fmt.Errorf("error creating JSON request body: %v", err)
+							return fmt.Errorf("error creating JSON request body: %v", err)
 						}
 						grpCurl = fmt.Sprintf("grpcurl -plaintext -proto %s -d '%s' localhost:50051 %s/%s",
-							"", message, service.GetFullyQualifiedName(), method.GetName())
+							protoFile, message, service.GetFullyQualifiedName(), method.GetName())
 						methodFound = true
 						break
 					}
@@ -149,16 +149,17 @@ func GrpCurlCommand(protoFile, serviceName, methodName string) {
 	}
 
 	if !serviceFound {
-		fmt.Errorf("service %s not found", serviceName)
+		return fmt.Errorf("service %s not found", serviceName)
 	}
 	if !methodFound {
-		fmt.Errorf("method %s not found in service %s", methodName, serviceName)
+		return fmt.Errorf("method %s not found in service %s", methodName, serviceName)
 	}
 	fmt.Println(grpCurl)
+	return nil
 }
 
 func createJSONRequestBody(fields []*descriptorpb.FieldDescriptorProto) (string, error) {
-	var fieldsMap = make(map[string]interface{})
+	fieldsMap := make(map[string]interface{})
 	fmt.Println(fields)
 	for _, field := range fields {
 		if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
