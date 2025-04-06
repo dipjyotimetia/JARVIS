@@ -24,10 +24,15 @@ func SpecAnalyzer() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "spec-analyzer",
 		Aliases: []string{"spec"},
-		Short:   "proto-analyzer is for analyzing protobuf spec files",
-		Long:    `proto-analyzer is for analyzing protobuf spec files`,
+		Short:   "spec-analyzer is for analyzing API specification files",
+		Long:    `spec-analyzer is for analyzing API specification files including Protobuf and OpenAPI`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			specPath, _ := cmd.Flags().GetString("path")
+
+			// Validate required flags
+			if specPath == "" {
+				return fmt.Errorf("spec path is required")
+			}
 
 			specContent := prompt.PromptContent{
 				ErrorMsg: "Please provide a valid spec.",
@@ -38,24 +43,28 @@ func SpecAnalyzer() *cobra.Command {
 
 			specs, err := files.ListFiles(specPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to list files: %w", err)
 			}
 			if len(specs) == 0 {
-				return errors.New("no files found")
+				return errors.New("no files found at the specified path")
 			}
-			fmt.Println("Analyzing spec files..." + spec)
+
+			fmt.Printf("Analyzing %s spec files...\n", spec)
 			switch spec {
 			case "protobuf":
-				utils.ProtoAnalyzer(specs)
+				if err := utils.ProtoAnalyzer(specs); err != nil {
+					return fmt.Errorf("failed to analyze protobuf files: %w", err)
+				}
 			case "openapi":
 				utils.OpenApiAnalyzer(specs)
 			default:
-				return nil
+				return fmt.Errorf("unsupported spec type: %s", spec)
 			}
 			return nil
 		},
 	}
 	setSpecPathFlag(cmd)
+	cmd.MarkFlagRequired("path")
 	return cmd
 }
 
@@ -69,10 +78,27 @@ func GrpcCurlGenerator() *cobra.Command {
 			protoFile, _ := cmd.Flags().GetString("proto")
 			serviceName, _ := cmd.Flags().GetString("service")
 			methodName, _ := cmd.Flags().GetString("method")
-			utils.GrpCurlCommand(protoFile, serviceName, methodName)
-			return nil
+
+			// Validate required flags
+			if protoFile == "" {
+				return fmt.Errorf("proto file path is required")
+			}
+			if serviceName == "" {
+				return fmt.Errorf("service name is required")
+			}
+			if methodName == "" {
+				return fmt.Errorf("method name is required")
+			}
+
+			return utils.GrpCurlCommand(protoFile, serviceName, methodName)
 		},
 	}
 	setGrpCurlPathFlag(cmd)
+
+	// Mark required flags
+	cmd.MarkFlagRequired("proto")
+	cmd.MarkFlagRequired("service")
+	cmd.MarkFlagRequired("method")
+
 	return cmd
 }
