@@ -1,0 +1,32 @@
+name: Test and Report
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: false
+
+    - name: Run tests with JSON output
+      run: |
+        go test ./... -json > test-output.json || true
+
+    - name: Generate Test Report
+      uses: dipjyotimetia/gotest-report@main
+      with:
+        test-json-file: test-output.json
+        output-file: test-report.md
+        comment-pr: true
