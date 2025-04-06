@@ -83,6 +83,7 @@ func init() {
 	rootCmd.AddCommand(proxyCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(certCmd)
+	rootCmd.AddCommand(commands.SetupCmd())
 }
 
 func Execute() {
