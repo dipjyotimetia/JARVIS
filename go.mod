@@ -16,6 +16,7 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/ncruces/go-sqlite3 v0.25.0
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	golang.org/x/oauth2 v0.28.0
@@ -73,7 +74,6 @@ require (
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
-	github.com/schollz/progressbar/v3 v3.18.0 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
