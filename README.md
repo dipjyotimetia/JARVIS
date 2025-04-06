@@ -1,29 +1,86 @@
-# *JARVIS*
+# Jarvis
 
-🚀 A generative AI-driven CLI for testing 🚀
+🧠 An AI-powered CLI tool for intelligent API testing and traffic inspection
 
 <img src="docs/assets/jarvis.jpg" width="400">
 
-Jarvis is a powerful CLI tool that leverages advanced generative AI technologies (such as Google's Gemini Pro LLM and Gemini Vision Pro) to streamline and enhance various software testing activities. It aims to revolutionize how we approach test case generation and scenario creation
-powerful HTTP proxy for recording, replaying, and analyzing API traffic., making it easier for developers and testers to ensure the quality and reliability of their applications.
+[![goreleaser](https://github.com/dipjyotimetia/jarvis/actions/workflows/release.yml/badge.svg)](https://github.com/dipjyotimetia/jarvis/actions/workflows/release.yml)
+
+## Overview
+
+Jarvis is a powerful CLI tool that leverages Google's Gemini AI models to revolutionize API testing workflows. It combines intelligent test generation capabilities with HTTP traffic inspection to streamline development and testing processes.
 
 ## Features
 
-- **Multiple Operation Modes**:
-  - Record Mode: Capture all requests and responses
-  - Replay Mode: Serve recorded responses without contacting backend servers
-  - Passthrough Mode: Forward requests to target servers
+### 🤖 AI-Powered Test Generation
+- **API Spec Analysis**: Generate comprehensive test scenarios from OpenAPI and Protobuf specifications
+- **Gemini Integration**: Utilize Google's advanced AI models for intelligent test case creation
+- **File Processing**: Process specification files to identify edge cases and testing requirements
 
-- **Path-Based Routing**: Route different paths to different target servers
-- **SQLite Storage**: Efficiently store and query captured traffic
-- **Graceful Shutdown**: Handle process termination properly
-- **Low Memory Overhead**: Efficient buffer management with sync.Pool
-- **CLI Interface**: Simple command-line operations for all modes
-- **Confluence and Jira Integration**: Jarvis can read from Confluence and Jira to suggest test cases using Google Gemini. This feature allows you to integrate your documentation and issue tracking systems with Jarvis to generate relevant test cases.
-- **Test Case Generation**: Jarvis can generate test cases based on the provided API specifications, ensuring comprehensive coverage and adherence to best practices.
-- **Scenario Generation**: Jarvis can generate test scenarios based on the provided API specifications, ensuring comprehensive coverage and adherence to best practices.
+### 🔍 Traffic Inspector
+- **HTTP Proxy**: Record, replay, and analyze API traffic with minimal configuration
+- **Multiple Modes**: Record mode, replay mode, and passthrough mode
+- **Path-Based Routing**: Route different API paths to different target servers
+- **Interactive UI**: Review captured traffic through a clean web interface
 
-## Configuration Options
+### 🔄 Integration
+- **Jira & Confluence**: Connect to your existing documentation and issue tracking
+- **GitHub**: Stay updated with automatic version checks
+- **Customizable Output**: Generate output in formats that suit your workflow
+
+## Installation
+
+```bash
+# Download the latest release for your platform from:
+# https://github.com/dipjyotimetia/jarvis/releases
+
+# Make it executable (Linux/macOS)
+chmod +x jarvis
+
+# Move to a directory in your PATH (Linux/macOS)
+sudo mv jarvis /usr/local/bin/
+```
+
+## Quick Start
+
+```bash
+# Check version
+jarvis version
+
+# Generate test scenarios from OpenAPI spec
+jarvis generate-scenarios --path="specs/openapi/v3.0/my_api.yaml"
+
+# Generate test scenarios from Protobuf spec
+jarvis generate-test --path="specs/proto" --output="output"
+
+# Start the traffic inspector proxy
+jarvis proxy --port=8080
+```
+
+## Gemini API Setup
+
+Jarvis requires a Google Gemini API key to utilize AI features:
+
+1. Visit [Google AI Studio](https://ai.google.dev/)
+2. Create an API key
+3. Set as environment variable:
+   ```bash
+   # Linux/macOS
+   export API_KEY="your_api_key"
+   
+   # Windows
+   $Env:API_KEY = "your_api_key"
+   ```
+
+## Documentation
+
+- Design Document
+- Setup Guide
+- Example Usage
+
+## Configuration
+
+Jarvis can be configured via command-line flags or a config file:
 
 | Option | Description | Default |
 |--------|-------------|---------|
@@ -31,5 +88,11 @@ powerful HTTP proxy for recording, replaying, and analyzing API traffic., making
 | `http_target_url` | Default target URL for proxying | (required) |
 | `target_routes` | Array of path-based routing rules | [] |
 | `sqlite_db_path` | Path to SQLite database file | traffic_inspector.db |
-| `recording_mode` | Enable recording mode | false |
-| `replay_mode` | Enable replay mode | false |
+
+## Contributing
+
+We welcome contributions! Please see our PR template for more details.
+
+## License
+
+MIT
