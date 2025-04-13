@@ -172,6 +172,12 @@ func init() {
 	proxyCmd.Flags().Int("tls-port", 8443, "HTTPS port")
 	proxyCmd.Flags().Bool("insecure", false, "Allow insecure TLS connections to target servers")
 
+	// mTLS flags
+	proxyCmd.Flags().Bool("mtls", false, "Enable mutual TLS (mTLS) authentication")
+	proxyCmd.Flags().String("client-ca", "", "CA certificate file for verifying client certificates")
+	proxyCmd.Flags().String("client-cert", "", "Client certificate file for outbound mTLS connections")
+	proxyCmd.Flags().String("client-key", "", "Client key file for outbound mTLS connections")
+
 	proxyCmd.Flags().Int("ui-port", 9090, "Port for the web UI")
 
 	// Add OpenAPI validation flags
@@ -220,6 +226,12 @@ func init() {
 	viper.BindPFlag("tls.port", proxyCmd.Flags().Lookup("tls-port"))
 	viper.BindPFlag("tls.allow_insecure", proxyCmd.Flags().Lookup("insecure"))
 
+	// Bind mTLS flags
+	viper.BindPFlag("tls.client_auth", proxyCmd.Flags().Lookup("mtls"))
+	viper.BindPFlag("tls.client_ca_cert", proxyCmd.Flags().Lookup("client-ca"))
+	viper.BindPFlag("tls.client_cert_file", proxyCmd.Flags().Lookup("client-cert"))
+	viper.BindPFlag("tls.client_key_file", proxyCmd.Flags().Lookup("client-key"))
+
 	// Bind OpenAPI validation flags
 	viper.BindPFlag("api_validation.enabled", proxyCmd.Flags().Lookup("api-validate"))
 	viper.BindPFlag("api_validation.spec_path", proxyCmd.Flags().Lookup("api-spec"))
@@ -240,6 +252,10 @@ func getMode(cfg *conf.Config) string {
 
 	if cfg.TLS.Enabled {
 		mode += " with TLS"
+		if cfg.TLS.ClientAuth {
+			mode += " (mTLS)"
+		}
+
 	}
 
 	if cfg.APIValidation.Enabled {

@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/tls"
 	"errors"
+	"log"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -21,6 +22,11 @@ type TLSConfig struct {
 	KeyFile       string `mapstructure:"key_file"`
 	Port          int    `mapstructure:"port"`
 	AllowInsecure bool   `mapstructure:"allow_insecure"`
+	// mTLS configuration
+	ClientAuth     bool   `mapstructure:"client_auth"`
+	ClientCACert   string `mapstructure:"client_ca_cert"`
+	ClientCertFile string `mapstructure:"client_cert_file"`
+	ClientKeyFile  string `mapstructure:"client_key_file"`
 }
 
 // APIValidationConfig holds configuration for OpenAPI validation
@@ -140,7 +146,19 @@ func (c *Config) GetTargetURL(path string) string {
 
 // GetTLSConfig returns a TLS configuration for clients
 func (c *Config) GetTLSConfig() *tls.Config {
-	return &tls.Config{
+	clientConfig := &tls.Config{
 		InsecureSkipVerify: c.TLS.AllowInsecure,
 	}
+
+	// Add client certificate for mTLS if enabled
+	if c.TLS.ClientAuth && c.TLS.ClientCertFile != "" && c.TLS.ClientKeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(c.TLS.ClientCertFile, c.TLS.ClientKeyFile)
+		if err != nil {
+			log.Printf("⚠️ Failed to load client certificates for mTLS: %v", err)
+		} else {
+			clientConfig.Certificates = []tls.Certificate{cert}
+		}
+	}
+
+	return clientConfig
 }

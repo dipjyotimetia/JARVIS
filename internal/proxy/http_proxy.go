@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -203,10 +205,8 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			ResponseHeaderTimeout: 20 * time.Second,
-			// Allow insecure TLS if configured
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: cfg.TLS.AllowInsecure,
-			},
+			// Apply TLS config for outbound connections to target servers
+			TLSClientConfig: cfg.GetTLSConfig(),
 		},
 		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("🚨 HTTPS proxy error: %v", err)
@@ -224,6 +224,28 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 	// Create handler function with all dependencies
 	handler := createHTTPHandler(proxy, cfg, db, insertStmt, &responseBufPool)
 
+	// Configure TLS for the server (inbound connections)
+	tlsConfig := &tls.Config{}
+
+	// Configure client certificate verification for inbound connections (mTLS)
+	if cfg.TLS.ClientAuth && cfg.TLS.ClientCACert != "" {
+		// Load CA certificate for client verification
+		caCert, err := os.ReadFile(cfg.TLS.ClientCACert)
+		if err != nil {
+			log.Printf("🚨 Failed to read client CA certificate: %v", err)
+		} else {
+			caCertPool := x509.NewCertPool()
+			if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+				log.Printf("🚨 Failed to parse client CA certificate")
+			} else {
+				// Set client certificate verification
+				tlsConfig.ClientCAs = caCertPool
+				tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+				log.Printf("🔒 mTLS enabled: Client certificates will be verified")
+			}
+		}
+	}
+
 	// Create HTTPS server with TLS configuration
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.TLS.Port),
@@ -232,11 +254,16 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
+		TLSConfig:    tlsConfig,
 	}
 
 	// Start HTTPS server in a goroutine
 	go func() {
 		log.Printf("🚀 Starting HTTPS proxy server on port %d with TLS", cfg.TLS.Port)
+		if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
+			log.Printf("🔒 mTLS is enabled - client certificates will be verified")
+		}
+
 		// Log the routing table
 		if len(cfg.TargetRoutes) > 0 {
 			log.Println("📝 Routing configuration:")
