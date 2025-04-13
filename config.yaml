@@ -18,6 +18,11 @@ tls:
   key_file: ./certs/server.key
   port: 8443
   allow_insecure: false
+  # mTLS configuration
+  client_auth: false
+  client_ca_cert: ./certs/ca.crt
+  client_cert_file: ./certs/client.crt
+  client_key_file: ./certs/client.key
 api_validation:
   enabled: true
   spec_path: "/path/to/openapi.yaml"
