@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -116,11 +115,7 @@ func TestStartHTTPProxy_PassthroughMode(t *testing.T) {
 	testHandler := func(w http.ResponseWriter, r *http.Request) {
 		handleHTTPRequest(w, r, httputil.NewSingleHostReverseProxy(
 			&url.URL{Scheme: "http", Host: strings.TrimPrefix(targetServer.URL, "http://")},
-		), cfg, db, stmt, &sync.Pool{
-			New: func() any {
-				return new(bytes.Buffer)
-			},
-		}, nil)
+		), cfg, db, stmt, nil)
 	}
 
 	proxyTestServer := httptest.NewServer(http.HandlerFunc(testHandler))

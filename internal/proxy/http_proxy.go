@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -26,6 +27,7 @@ import (
 	"github.com/dipjyotimetia/jarvis/config"
 	"github.com/dipjyotimetia/jarvis/internal/db"
 	"github.com/dipjyotimetia/jarvis/internal/validator"
+	"golang.org/x/time/rate"
 )
 
 // Server interface allows for mocking in tests
@@ -33,30 +35,32 @@ type Server interface {
 	Shutdown(ctx context.Context) error
 }
 
-// bufferPool for reusing byte slices
-var bufferPool = sync.Pool{
-	New: func() any {
-		// Start with 4KB, can grow
-		b := make([]byte, 0, 4*1024)
-		return &b // Store pointers to slices
-	},
+// bufferPool implements httputil.BufferPool
+type bufferPool struct {
+	pool sync.Pool
 }
 
-// Helper to get a buffer from the pool
-func getBuffer() *bytes.Buffer {
-	buf := bufferPool.Get().(*[]byte)
-	*buf = (*buf)[:0] // Reset slice length, keep capacity
-	return bytes.NewBuffer(*buf)
+func newBufferPool() *bufferPool {
+	return &bufferPool{
+		pool: sync.Pool{
+			New: func() any {
+				return new(bytes.Buffer)
+			},
+		},
+	}
 }
 
-// Helper to put a buffer back into the pool
-func putBuffer(buf *bytes.Buffer) {
-	// If the buffer didn't grow excessively large, put it back
-	// This prevents keeping very large buffers in the pool indefinitely
-	const maxBufferSize = 1 * 1024 * 1024 // 1MB limit
-	if buf != nil && buf.Cap() <= maxBufferSize {
-		b := buf.Bytes()
-		bufferPool.Put(&b) // Store pointer to the underlying slice
+func (p *bufferPool) Get() []byte {
+	buf := p.pool.Get().(*bytes.Buffer)
+	b := buf.Bytes()
+	buf.Reset()
+	return b
+}
+
+func (p *bufferPool) Put(b []byte) {
+	if len(b) <= 2*1024*1024 { // 2MB limit
+		buf := bytes.NewBuffer(b)
+		p.pool.Put(buf)
 	}
 }
 
@@ -88,49 +92,56 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 		// Set host header to target host
 		req.Host = target.Host
 		req.Header.Del("X-Forwarded-For")
+
+		// Add compression support
+		if req.Header.Get("Accept-Encoding") == "" {
+			req.Header.Set("Accept-Encoding", "gzip, deflate")
+		}
 	}
 
-	// Create a custom ReverseProxy with our director
+	// Create a custom ReverseProxy with optimized settings
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,
-				KeepAlive: 60 * time.Second,
+				KeepAlive: 90 * time.Second,
 			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          200,
-			MaxIdleConnsPerHost:   100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			ResponseHeaderTimeout: 20 * time.Second,
+			ForceAttemptHTTP2:      true,
+			MaxIdleConns:           500,
+			MaxIdleConnsPerHost:    100,
+			MaxConnsPerHost:        200,
+			IdleConnTimeout:        120 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			ResponseHeaderTimeout:  20 * time.Second,
+			DisableCompression:     false,
+			MaxResponseHeaderBytes: 1 << 20,
 		},
 		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("🚨 HTTP proxy error: %v", err)
 			rw.WriteHeader(http.StatusBadGateway)
 		},
+		BufferPool: newBufferPool(),
 	}
 
-	// Buffer pool for the response writer wrapper
-	responseBufPool := sync.Pool{
-		New: func() interface{} {
-			return new(bytes.Buffer)
-		},
-	}
+	// Create rate limiter
+	limiter := rate.NewLimiter(rate.Limit(cfg.RateLimit), cfg.RateBurst)
 
 	// Create handler function with all dependencies
-	handler := createHTTPHandler(proxy, cfg, db, insertStmt, &responseBufPool)
+	handler := createHTTPHandler(proxy, cfg, db, insertStmt, limiter)
 
-	// Create the HTTP server
+	// Create the HTTP server with optimized settings
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: http.HandlerFunc(handler),
-		// Set timeouts
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		// Optimized timeouts
+		ReadTimeout:       20 * time.Second,  // Increased from 15s
+		WriteTimeout:      40 * time.Second,  // Increased from 30s
+		IdleTimeout:       120 * time.Second, // Increased from 60s
+		ReadHeaderTimeout: 10 * time.Second,  // Added header timeout
+		MaxHeaderBytes:    1 << 20,           // 1MB limit for headers
 	}
 
 	// Start server in a goroutine
@@ -214,15 +225,11 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 		},
 	}
 
-	// Buffer pool for the response writer wrapper
-	responseBufPool := sync.Pool{
-		New: func() interface{} {
-			return new(bytes.Buffer)
-		},
-	}
+	// Create rate limiter
+	limiter := rate.NewLimiter(rate.Limit(cfg.RateLimit), cfg.RateBurst)
 
 	// Create handler function with all dependencies
-	handler := createHTTPHandler(proxy, cfg, db, insertStmt, &responseBufPool)
+	handler := createHTTPHandler(proxy, cfg, db, insertStmt, limiter)
 
 	// Configure TLS for the server (inbound connections)
 	tlsConfig := &tls.Config{}
@@ -289,36 +296,32 @@ func createHTTPHandler(
 	cfg *config.Config,
 	database *sql.DB,
 	insertStmt *sql.Stmt,
-	responseBufPool *sync.Pool,
+	limiter *rate.Limiter,
 ) func(http.ResponseWriter, *http.Request) {
-	// Initialize API validator if enabled
-	var apiValidator *validator.APIValidator
-	if cfg.APIValidation.Enabled {
-		log.Printf("🔍 Initializing OpenAPI validator from spec: %s", cfg.APIValidation.SpecPath)
-		validatorOptions := validator.APIValidatorOptions{
-			EnableRequestValidation:  cfg.APIValidation.ValidateRequests,
-			EnableResponseValidation: cfg.APIValidation.ValidateResponses,
-			StrictMode:               cfg.APIValidation.StrictMode,
-		}
-
-		var err error
-		apiValidator, err = validator.NewAPIValidator(cfg.APIValidation.SpecPath, validatorOptions)
-		if err != nil {
-			log.Printf("⚠️ Failed to initialize OpenAPI validator: %v", err)
-		} else {
-			// Log API details
-			apiInfo := apiValidator.GetOpenAPIInfo()
-			log.Printf("🔍 Loaded OpenAPI spec: %s v%s", apiInfo["title"], apiInfo["version"])
-			log.Printf("🔍 Number of API paths: %s", apiInfo["paths"])
-
-			// Log validation modes
-			log.Printf("🔍 Request validation: %v, Response validation: %v",
-				cfg.APIValidation.ValidateRequests, cfg.APIValidation.ValidateResponses)
-		}
-	}
-
 	return func(w http.ResponseWriter, r *http.Request) {
-		handleHTTPRequest(w, r, proxy, cfg, database, insertStmt, responseBufPool, apiValidator)
+		// Apply rate limiting
+		if !limiter.Allow() {
+			http.Error(w, "Too many requests", http.StatusTooManyRequests)
+			return
+		}
+
+		// Initialize API validator if enabled
+		var apiValidator *validator.APIValidator
+		if cfg.APIValidation.Enabled {
+			validatorOptions := validator.APIValidatorOptions{
+				EnableRequestValidation:  cfg.APIValidation.ValidateRequests,
+				EnableResponseValidation: cfg.APIValidation.ValidateResponses,
+				StrictMode:               cfg.APIValidation.StrictMode,
+			}
+
+			var err error
+			apiValidator, err = validator.NewAPIValidator(cfg.APIValidation.SpecPath, validatorOptions)
+			if err != nil {
+				log.Printf("⚠️ Failed to initialize API validator: %v", err)
+			}
+		}
+
+		handleHTTPRequest(w, r, proxy, cfg, database, insertStmt, apiValidator)
 	}
 }
 
@@ -335,9 +338,7 @@ func (r *responseRecorder) Header() http.Header {
 	// Ensure headers are initialized from the underlying writer if not already set
 	if len(r.header) == 0 {
 		originalHeaders := r.ResponseWriter.Header()
-		for k, v := range originalHeaders {
-			r.header[k] = v
-		}
+		maps.Copy(r.header, originalHeaders)
 	}
 	return r.header
 }
@@ -493,7 +494,6 @@ func handleHTTPRequest(
 	cfg *config.Config,
 	database *sql.DB,
 	insertStmt *sql.Stmt,
-	responseBufPool *sync.Pool,
 	apiValidator *validator.APIValidator,
 ) {
 	startTime := time.Now()
@@ -512,8 +512,12 @@ func handleHTTPRequest(
 	var reqBodyBytes []byte
 	var reqBodyErr error
 	if (cfg.RecordingMode || (apiValidator != nil && cfg.APIValidation.ValidateRequests)) && r.Body != nil && r.ContentLength != 0 {
-		buf := getBuffer()
-		defer putBuffer(buf)
+		buf := bytes.NewBuffer(make([]byte, 0, 8*1024))
+		defer func() {
+			if buf.Cap() <= 2*1024*1024 { // 2MB limit
+				buf.Reset()
+			}
+		}()
 
 		teeReader := io.TeeReader(r.Body, buf)
 		_, errRead := io.ReadAll(teeReader)
@@ -572,9 +576,12 @@ func handleHTTPRequest(
 
 	// Always use recorder if we need to validate the response
 	if cfg.RecordingMode || (apiValidator != nil && cfg.APIValidation.ValidateResponses) {
-		responseBuf := responseBufPool.Get().(*bytes.Buffer)
-		responseBuf.Reset()
-		defer responseBufPool.Put(responseBuf)
+		responseBuf := bytes.NewBuffer(make([]byte, 0, 8*1024))
+		defer func() {
+			if responseBuf.Cap() <= 2*1024*1024 { // 2MB limit
+				responseBuf.Reset()
+			}
+		}()
 
 		recorder = &responseRecorder{
 			ResponseWriter: w,

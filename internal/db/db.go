@@ -35,22 +35,23 @@ type TrafficRecord struct {
 // Initialize sets up the database connection and schema
 func Initialize(dbPath string) (*sql.DB, *sql.Stmt, error) {
 	// Initialize SQLite client with improved concurrency settings
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=30000&_timeout=30000&cache=shared")
+	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=30000&_timeout=30000&cache=shared&_pragma=mmap_size=30000000000")
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening SQLite database: %w", err)
 	}
 
-	// Set SQLite connection pool settings
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	// Set optimized SQLite connection pool settings
+	db.SetMaxOpenConns(25)                  // Increased from 1 to handle more concurrent operations
+	db.SetMaxIdleConns(10)                  // Increased from 1 to maintain a pool of idle connections
+	db.SetConnMaxLifetime(30 * time.Minute) // Increased from 5 minutes to reduce connection churn
+	db.SetConnMaxIdleTime(10 * time.Minute) // Added idle timeout
 
 	if err := db.Ping(); err != nil {
 		return nil, nil, fmt.Errorf("pinging SQLite database: %w", err)
 	}
 	log.Printf("🔗 Connected to SQLite database at %s", dbPath)
 
-	// Create schema and prepare statement
+	// Create schema and prepare statements
 	stmt, err := setupDatabase(db)
 	if err != nil {
 		return nil, nil, fmt.Errorf("setting up database: %w", err)
@@ -61,7 +62,7 @@ func Initialize(dbPath string) (*sql.DB, *sql.Stmt, error) {
 
 // setupDatabase creates schema and prepares insert statement
 func setupDatabase(db *sql.DB) (*sql.Stmt, error) {
-	// Schema creation SQL with WebSocket support
+	// Schema creation SQL with WebSocket support and optimized indexes
 	query := `
     CREATE TABLE IF NOT EXISTS traffic_records (
         id TEXT PRIMARY KEY,
@@ -79,23 +80,21 @@ func setupDatabase(db *sql.DB) (*sql.Stmt, error) {
         client_ip TEXT,
         test_id TEXT,         
         session_id TEXT,
-        connection_id TEXT,    -- WebSocket connection identifier
-        message_type INTEGER,  -- WebSocket message type
-        direction TEXT         -- WebSocket message direction
+        connection_id TEXT,    
+        message_type INTEGER,  
+        direction TEXT         
     );
 
-    -- Index for HTTP replay/lookup
+    -- Optimized indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_http_lookup ON traffic_records(protocol, method, url) WHERE protocol = 'HTTP';
-    
-    -- Index for WebSocket replay/lookup
     CREATE INDEX IF NOT EXISTS idx_ws_lookup ON traffic_records(protocol, connection_id) WHERE protocol = 'WebSocket';
-    
-    -- Index for searching by time
-    CREATE INDEX IF NOT EXISTS idx_timestamp ON traffic_records(timestamp);
-    
-    -- Index for searching by session or test ID
+    CREATE INDEX IF NOT EXISTS idx_timestamp ON traffic_records(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_session_id ON traffic_records(session_id) WHERE session_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_test_id ON traffic_records(test_id) WHERE test_id IS NOT NULL;
+    
+    -- Add covering index for common query patterns
+    CREATE INDEX IF NOT EXISTS idx_http_common ON traffic_records(protocol, method, url, timestamp, response_status) 
+    WHERE protocol = 'HTTP';
     `
 
 	_, err := db.Exec(query)
@@ -103,7 +102,7 @@ func setupDatabase(db *sql.DB) (*sql.Stmt, error) {
 		return nil, fmt.Errorf("creating schema: %w", err)
 	}
 
-	// Prepare statement for inserts
+	// Prepare statement for inserts with optimized parameters
 	insertSQL := `INSERT INTO traffic_records (
         id, timestamp, protocol, method, url, service,
         request_headers, request_body, response_status,

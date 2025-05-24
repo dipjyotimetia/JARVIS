@@ -50,6 +50,8 @@ type Config struct {
 	TLS           TLSConfig           `mapstructure:"tls"`            // TLS configuration
 	APIValidation APIValidationConfig `mapstructure:"api_validation"` // OpenAPI validation configuration
 	UIPort        int                 `mapstructure:"ui_port"`
+	RateLimit     float64             `mapstructure:"rate_limit"` // Requests per second
+	RateBurst     int                 `mapstructure:"rate_burst"` // Maximum burst size
 }
 
 // LoadConfig reads configuration from Viper
@@ -161,4 +163,38 @@ func (c *Config) GetTLSConfig() *tls.Config {
 	}
 
 	return clientConfig
+}
+
+// DefaultConfig returns the default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		HTTPPort:      8080,
+		HTTPTargetURL: "",
+		TargetRoutes:  []TargetRoute{},
+		SQLiteDBPath:  "traffic_inspector.db",
+		RecordingMode: false,
+		ReplayMode:    false,
+		TLS: TLSConfig{
+			Enabled:        false,
+			CertFile:       "",
+			KeyFile:        "",
+			Port:           0,
+			AllowInsecure:  false,
+			ClientAuth:     false,
+			ClientCACert:   "",
+			ClientCertFile: "",
+			ClientKeyFile:  "",
+		},
+		APIValidation: APIValidationConfig{
+			Enabled:              false,
+			SpecPath:             "",
+			ValidateRequests:     false,
+			ValidateResponses:    false,
+			StrictMode:           false,
+			ContinueOnValidation: false,
+		},
+		UIPort:    8081,
+		RateLimit: 1000, // Default to 1000 requests per second
+		RateBurst: 2000, // Default burst of 2000 requests
+	}
 }
