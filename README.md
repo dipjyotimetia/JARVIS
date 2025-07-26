@@ -8,7 +8,7 @@
 
 ## Overview
 
-Jarvis is a powerful CLI tool that leverages Google's Gemini AI models to revolutionize API testing workflows. It combines intelligent test generation capabilities with HTTP traffic inspection to streamline development and testing processes.
+Jarvis is a powerful CLI tool that leverages Open Weight AI models to revolutionize API testing workflows. It combines intelligent test generation capabilities with HTTP traffic inspection to streamline development and testing processes.
 
 ## Features
 
@@ -56,21 +56,6 @@ jarvis generate-test --path="specs/proto" --output="output"
 # Start the traffic inspector proxy
 jarvis proxy --port=8080
 ```
-
-## Gemini API Setup
-
-Jarvis requires a Google Gemini API key to utilize AI features:
-
-1. Visit [Google AI Studio](https://ai.google.dev/)
-2. Create an API key
-3. Set as environment variable:
-   ```bash
-   # Linux/macOS
-   export API_KEY="your_api_key"
-   
-   # Windows
-   $Env:API_KEY = "your_api_key"
-   ```
 
 ## Documentation
 

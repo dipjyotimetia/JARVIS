@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/google/generative-ai-go/genai"
 	"github.com/manifoldco/promptui"
 )
 
@@ -27,16 +26,9 @@ type PromptContent struct {
 	Items    []string
 }
 
-// CompareSpecFiles returns a prompt to compare two spec files
-func CompareSpecFiles(file1, file2 genai.Part, specType specType) []genai.Part {
-	prompt := []genai.Part{
-		file1,
-		file2,
-		genai.Text(fmt.Sprintf("compare the two %s contracts, check if there a breaking change introduced by this change?", specType)),
-	}
-
-	return prompt
-}
+// Note: CompareSpecFiles function was removed as it was specific to the old Gemini API
+// If spec comparison functionality is needed in the future, it can be implemented
+// using the new Ollama API with string-based prompts.
 
 func SelectLanguage(pc PromptContent) string {
 	var items []string

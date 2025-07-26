@@ -8,7 +8,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/dipjyotimetia/jarvis/pkg/engine/files"
-	"github.com/dipjyotimetia/jarvis/pkg/engine/gemini"
+	"github.com/dipjyotimetia/jarvis/pkg/engine/ollama"
 	"github.com/dipjyotimetia/jarvis/pkg/engine/prompt"
 	"github.com/spf13/cobra"
 )
@@ -66,12 +66,12 @@ func GenerateTestModule() *cobra.Command {
 
 			s.Start()
 			ctx := context.Background()
-			ai, err := gemini.New(ctx)
+			ai, err := ollama.New(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create Gemini engine: %w", err)
+				return fmt.Errorf("failed to create Ollama engine: %w", err)
 			}
 
-			err = ai.GenerateTextStreamWriter(ctx, reader, outputPath, language, spec)
+			err = ai.GenerateTextStreamWriter(ctx, reader, language, spec, outputPath)
 			if err != nil {
 				s.FinalMSG = "Test generation failed: %v\n"
 				return err
@@ -102,9 +102,9 @@ func GenerateTestScenarios() *cobra.Command {
 			spec := prompt.SelectLanguage(specContent)
 
 			ctx := context.Background()
-			ai, err := gemini.New(ctx)
+			ai, err := ollama.New(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create Gemini engine: %w", err)
+				return fmt.Errorf("failed to create Ollama engine: %w", err)
 			}
 
 			file, err := files.ListFiles(specPath)

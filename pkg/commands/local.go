@@ -134,7 +134,7 @@ func runSetupWizard() error {
 	}
 
 	// API Configuration
-	apiKey := prompt.Password("Enter your Gemini API Key (leave empty to skip)")
+	apiKey := prompt.Password("Enter your AI API Key (leave empty for offline mode)")
 
 	// Get default output directory
 	homeDir, err := os.UserHomeDir()
@@ -188,7 +188,7 @@ func runSetupWizard() error {
 	// Create configuration
 	config := map[string]interface{}{
 		"api": map[string]interface{}{
-			"gemini_key": apiKey,
+			"ai_key": apiKey,
 		},
 		"output": map[string]interface{}{
 			"directory":     outputDir,

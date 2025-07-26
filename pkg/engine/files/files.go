@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/google/generative-ai-go/genai"
 )
 
 func ListFiles(dir string) ([]string, error) {
@@ -67,23 +65,18 @@ func identifyFileType(data []byte) string {
 	return "Unknown"
 }
 
-func ReadFile(path string) ([]genai.Text, error) {
+func ReadFile(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
 	lines := strings.Split(string(data), "\n")
-	var texts []genai.Text
-	for _, line := range lines {
-		texts = append(texts, genai.Text(line))
-	}
-
-	return texts, nil
+	return lines, nil
 }
 
 func CheckDirectryExists(output string) {
 	if _, err := os.Stat(fmt.Sprintf("./%s", output)); os.IsNotExist(err) {
-		os.Mkdir(fmt.Sprintf("./%s", output), 0755)
+		os.Mkdir(fmt.Sprintf("./%s", output), 0o755)
 	}
 }
