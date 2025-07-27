@@ -14,7 +14,8 @@ Jarvis is a powerful CLI tool that leverages Open Weight AI models to revolution
 
 ### 🤖 AI-Powered Test Generation
 - **API Spec Analysis**: Generate comprehensive test scenarios from OpenAPI and Protobuf specifications
-- **Gemini Integration**: Utilize Google's advanced AI models for intelligent test case creation
+- **Contract Testing**: Generate Pact contracts for consumer-driven contract testing
+- **Ollama Integration**: Leverage local AI models for intelligent test case creation
 - **File Processing**: Process specification files to identify edge cases and testing requirements
 
 ### 🔍 Traffic Inspector
@@ -53,9 +54,63 @@ jarvis generate-scenarios --path="specs/openapi/v3.0/my_api.yaml"
 # Generate test scenarios from Protobuf spec
 jarvis generate-test --path="specs/proto" --output="output"
 
+# Generate Pact contracts from OpenAPI spec
+jarvis generate-contracts --path="specs/openapi/v3.0/my_api.yaml" --consumer="web-app" --provider="api-service"
+
+# Generate Pact contracts with test code
+jarvis generate-contracts --path="specs/openapi" --consumer="mobile-app" --provider="backend-api" --language="javascript" --framework="jest" --examples
+
 # Start the traffic inspector proxy
 jarvis proxy --port=8080
 ```
+
+## Pact Contract Generation
+
+Jarvis can generate Pact contracts from OpenAPI specifications using AI, helping you implement consumer-driven contract testing.
+
+### Features
+- **AI-Generated Contracts**: Creates realistic Pact contracts from OpenAPI specs
+- **Multi-Language Support**: Generates test code for JavaScript, Python, Java, Go
+- **Framework Integration**: Supports Jest, Pytest, JUnit, Go testing
+- **Smart Validation**: Comprehensive validation with helpful suggestions
+- **Template System**: Pre-built templates for common languages and frameworks
+
+### Usage Examples
+
+```bash
+# Basic contract generation
+jarvis gen generate-contracts \
+  --path="api-spec.yaml" \
+  --consumer="web-frontend" \
+  --provider="user-service"
+
+# Generate with test code
+jarvis gen generate-contracts \
+  --path="api-spec.yaml" \
+  --consumer="mobile-app" \
+  --provider="backend-api" \
+  --language="javascript" \
+  --framework="jest" \
+  --examples
+
+# Custom output directory
+jarvis gen generate-contracts \
+  --path="specs/openapi/" \
+  --consumer="client" \
+  --provider="server" \
+  --output="./pact-contracts"
+```
+
+### Supported Languages & Frameworks
+- **JavaScript**: Jest, Mocha
+- **Python**: Pytest, unittest
+- **Java**: JUnit, TestNG
+- **Go**: testing package
+- **TypeScript**: Jest, Mocha
+
+### Generated Files
+- `{consumer}-{provider}-pact.json`: Pact contract file
+- `{consumer}_{provider}_test.{ext}`: Test code (when `--examples` is used)
 
 ## Documentation
 

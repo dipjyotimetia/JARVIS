@@ -71,6 +71,7 @@ func init() {
 	// Add commands to groups
 	genGroup.AddCommand(commands.GenerateTestModule())
 	genGroup.AddCommand(commands.GenerateTestScenarios())
+	genGroup.AddCommand(commands.GenerateContractsModule())
 
 	analyzeGroup.AddCommand(commands.SpecAnalyzer())
 
