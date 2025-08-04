@@ -1,13 +1,13 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 
-	"github.com/jhump/protoreflect/desc/protoparse"
+	"github.com/bufbuild/protocompile"
 	"github.com/olekukonko/tablewriter"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,7 +29,7 @@ type PathItem struct {
 
 func OpenApiAnalyzer(specFiles []string) {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Method", "Path", "OperationID"})
+	table.Header("Method", "Path", "OperationID")
 
 	for _, specFile := range specFiles {
 		data, err := os.ReadFile(specFile)
@@ -67,37 +67,40 @@ func OpenApiAnalyzer(specFiles []string) {
 
 func ProtoAnalyzer(protoFiles []string) error {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"File", "Service", "Method", "Input Type", "Output Type", "Streaming"})
-	for _, protoFile := range protoFiles {
-		parser := protoparse.Parser{
-			// required for google proto files
-			ImportPaths:           []string{"."},
-			IncludeSourceCodeInfo: true,
-			InferImportPaths:      true,
-		}
-		fds, err := parser.ParseFiles(protoFile)
-		if err != nil {
-			return fmt.Errorf("error parsing Proto file %s: %v", protoFile, err)
-		}
+	table.Header("File", "Service", "Method", "Input Type", "Output Type", "Streaming")
+	
+	compiler := protocompile.Compiler{
+		Resolver: &protocompile.SourceResolver{
+			ImportPaths: []string{"."},
+		},
+	}
+	
+	ctx := context.Background()
+	fds, err := compiler.Compile(ctx, protoFiles...)
+	if err != nil {
+		return fmt.Errorf("error compiling Proto files: %v", err)
+	}
 
-		for _, file := range fds {
-			for _, service := range file.GetServices() {
-				for _, method := range service.GetMethods() {
-					descriptor := method.AsMethodDescriptorProto()
-					streaming := "No"
-					if descriptor.GetClientStreaming() || descriptor.GetServerStreaming() {
-						streaming = "Yes"
-					}
-
-					table.Append([]string{
-						file.GetName(),
-						service.GetName(),
-						method.GetName(),
-						descriptor.GetInputType(),
-						descriptor.GetOutputType(),
-						streaming,
-					})
+	for _, file := range fds {
+		services := file.Services()
+		for i := 0; i < services.Len(); i++ {
+			service := services.Get(i)
+			methods := service.Methods()
+			for j := 0; j < methods.Len(); j++ {
+				method := methods.Get(j)
+				streaming := "No"
+				if method.IsStreamingClient() || method.IsStreamingServer() {
+					streaming = "Yes"
 				}
+
+				table.Append([]string{
+					string(file.Path()),
+					string(service.Name()),
+					string(method.Name()),
+					string(method.Input().FullName()),
+					string(method.Output().FullName()),
+					streaming,
+				})
 			}
 		}
 	}
@@ -109,31 +112,48 @@ func ProtoAnalyzer(protoFiles []string) error {
 // generateGrpcurlCommand generates a grpcurl command for a given service and method
 func GrpCurlCommand(protoFile, serviceName, methodName string) error {
 	var grpCurl string
-	parser := protoparse.Parser{
-		ImportPaths:           []string{"."},
-		IncludeSourceCodeInfo: true,
-		InferImportPaths:      true,
+	compiler := protocompile.Compiler{
+		Resolver: &protocompile.SourceResolver{
+			ImportPaths: []string{"."},
+		},
 	}
 
-	fds, err := parser.ParseFiles(protoFile)
+	ctx := context.Background()
+	fds, err := compiler.Compile(ctx, protoFile)
 	if err != nil {
-		return fmt.Errorf("error parsing Proto file %s: %v", protoFile, err)
+		return fmt.Errorf("error compiling Proto file %s: %v", protoFile, err)
 	}
 
 	serviceFound := false
 	methodFound := false
 	for _, file := range fds {
-		for _, service := range file.GetServices() {
-			if service.GetName() == serviceName {
+		services := file.Services()
+		for i := 0; i < services.Len(); i++ {
+			service := services.Get(i)
+			if string(service.Name()) == serviceName {
 				serviceFound = true
-				for _, method := range service.GetMethods() {
-					if method.GetName() == methodName {
-						message, err := createJSONRequestBody(method.GetInputType().AsDescriptorProto().GetField())
+				methods := service.Methods()
+				for j := 0; j < methods.Len(); j++ {
+					method := methods.Get(j)
+					if string(method.Name()) == methodName {
+						// Create a simple JSON template based on the input message fields
+						inputMsg := method.Input()
+						fields := inputMsg.Fields()
+						fieldsMap := make(map[string]interface{})
+						for k := 0; k < fields.Len(); k++ {
+							field := fields.Get(k)
+							if field.IsList() {
+								fieldsMap[string(field.Name())] = []interface{}{}
+							} else {
+								fieldsMap[string(field.Name())] = ""
+							}
+						}
+						messageJSON, err := json.Marshal(fieldsMap)
 						if err != nil {
 							return fmt.Errorf("error creating JSON request body: %v", err)
 						}
 						grpCurl = fmt.Sprintf("grpcurl -plaintext -proto %s -d '%s' localhost:50051 %s/%s",
-							protoFile, message, service.GetFullyQualifiedName(), method.GetName())
+							protoFile, string(messageJSON), service.FullName(), method.Name())
 						methodFound = true
 						break
 					}
@@ -158,19 +178,3 @@ func GrpCurlCommand(protoFile, serviceName, methodName string) error {
 	return nil
 }
 
-func createJSONRequestBody(fields []*descriptorpb.FieldDescriptorProto) (string, error) {
-	fieldsMap := make(map[string]interface{})
-	fmt.Println(fields)
-	for _, field := range fields {
-		if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
-			fieldsMap[field.GetJsonName()] = []interface{}{}
-		} else {
-			fieldsMap[field.GetJsonName()] = ""
-		}
-	}
-	jsonData, err := json.Marshal(fieldsMap)
-	if err != nil {
-		return "", err
-	}
-	return string(jsonData), nil
-}
