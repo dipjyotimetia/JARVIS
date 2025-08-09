@@ -1,8 +1,8 @@
-# Jarvis
+# JARVIS
 
-🧠 An AI-powered CLI tool for intelligent API testing and traffic inspection
+An AI-powered CLI tool for intelligent API testing and traffic inspection
 
-<img src="docs/assets/jarvis.png" width="400">
+<img src="docs/assets/jarvis_updated.png" width="400">
 
 [![goreleaser](https://github.com/dipjyotimetia/jarvis/actions/workflows/release.yml/badge.svg)](https://github.com/dipjyotimetia/jarvis/actions/workflows/release.yml)
 
