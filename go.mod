@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/briandowns/spinner v1.23.2
 	github.com/bufbuild/protocompile v0.14.1
-	github.com/ctreminiom/go-atlassian v1.6.1
+	github.com/ctreminiom/go-atlassian/v2 v2.7.0
 	github.com/fatih/color v1.18.0
 	github.com/getkin/kin-openapi v0.132.0
 	github.com/go-git/go-billy/v5 v5.6.2
@@ -65,6 +65,7 @@ require (
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/ckaznocha/intrange v0.3.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
+	// github.com/ctreminiom/go-atlassian/v2 is a direct dependency above
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/daixiang0/gci v0.13.5 // indirect
