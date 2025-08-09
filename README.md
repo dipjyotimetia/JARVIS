@@ -2,7 +2,7 @@
 
 🧠 An AI-powered CLI tool for intelligent API testing and traffic inspection
 
-<img src="docs/assets/jarvis.jpg" width="400">
+<img src="docs/assets/readme_image.png" width="400">
 
 [![goreleaser](https://github.com/dipjyotimetia/jarvis/actions/workflows/release.yml/badge.svg)](https://github.com/dipjyotimetia/jarvis/actions/workflows/release.yml)
 
