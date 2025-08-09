@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -48,7 +48,7 @@ func Initialize(dbPath string) (*sql.DB, *sql.Stmt, error) {
 	if err := db.Ping(); err != nil {
 		return nil, nil, fmt.Errorf("pinging SQLite database: %w", err)
 	}
-	log.Printf("🔗 Connected to SQLite database at %s", dbPath)
+	slog.Info("Connected to SQLite database", "path", dbPath)
 
 	// Create schema and prepare statement
 	stmt, err := setupDatabase(db)
@@ -117,6 +117,6 @@ func setupDatabase(db *sql.DB) (*sql.Stmt, error) {
 		return nil, fmt.Errorf("preparing insert statement: %w", err)
 	}
 
-	log.Println("✅ Database schema verified and statement prepared")
+	slog.Info("Database schema verified and statement prepared")
 	return stmt, nil
 }

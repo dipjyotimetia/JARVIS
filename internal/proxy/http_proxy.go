@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -43,7 +43,7 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 		// Parse the target URL for this request
 		target, err := url.Parse(targetURLStr)
 		if err != nil {
-			log.Printf("🚨 ERROR: Invalid target URL %s: %v", targetURLStr, err)
+			slog.Error("Invalid target URL", "url", targetURLStr, "error", err)
 			return
 		}
 
@@ -98,7 +98,7 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 			TLSClientConfig: cfg.GetTLSConfig(),
 		},
 		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("🚨 HTTP proxy error: %v", err)
+			slog.Error("HTTP proxy error", "error", err)
 			rw.WriteHeader(http.StatusBadGateway)
 		},
 	}
@@ -125,20 +125,20 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("🚀 Starting HTTP proxy server on port %d with path-based routing", cfg.HTTPPort)
+		slog.Info("Starting HTTP proxy server with path-based routing", "port", cfg.HTTPPort)
 		// Log the routing table
 		if len(cfg.TargetRoutes) > 0 {
-			log.Println("📝 Routing configuration:")
+			slog.Info("Routing configuration:")
 			for _, route := range cfg.TargetRoutes {
-				log.Printf("  %s -> %s", route.PathPrefix, route.TargetURL)
+				slog.Info("Route mapping", "path_prefix", route.PathPrefix, "target_url", route.TargetURL)
 			}
 		}
 		if cfg.HTTPTargetURL != "" {
-			log.Printf("  default -> %s", cfg.HTTPTargetURL)
+			slog.Info("Default route mapping", "target_url", cfg.HTTPTargetURL)
 		}
 
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("🚨 HTTP server error: %v", err)
+			slog.Error("HTTP server error", "error", err)
 		}
 	}()
 
@@ -147,7 +147,7 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 
 func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertStmt *sql.Stmt) Server {
 	if !cfg.TLS.Enabled {
-		log.Println("⚠️ TLS is not enabled in configuration, skipping HTTPS proxy")
+		slog.Warn("TLS is not enabled in configuration, skipping HTTPS proxy")
 		return nil
 	}
 
@@ -159,7 +159,7 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 		// Parse the target URL for this request
 		target, err := url.Parse(targetURLStr)
 		if err != nil {
-			log.Printf("🚨 ERROR: Invalid target URL %s: %v", targetURLStr, err)
+			slog.Error("Invalid target URL", "url", targetURLStr, "error", err)
 			return
 		}
 
@@ -213,7 +213,7 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 			TLSClientConfig: cfg.GetTLSConfig(),
 		},
 		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("🚨 HTTPS proxy error: %v", err)
+			slog.Error("HTTPS proxy error", "error", err)
 			rw.WriteHeader(http.StatusBadGateway)
 		},
 	}
@@ -236,16 +236,16 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 		// Load CA certificate for client verification
 		caCert, err := os.ReadFile(cfg.TLS.ClientCACert)
 		if err != nil {
-			log.Printf("🚨 Failed to read client CA certificate: %v", err)
+			slog.Error("Failed to read client CA certificate", "error", err)
 		} else {
 			caCertPool := x509.NewCertPool()
 			if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-				log.Printf("🚨 Failed to parse client CA certificate")
+				slog.Error("Failed to parse client CA certificate")
 			} else {
 				// Set client certificate verification
 				tlsConfig.ClientCAs = caCertPool
 				tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
-				log.Printf("🔒 mTLS enabled: Client certificates will be verified")
+				slog.Info("mTLS enabled: Client certificates will be verified")
 			}
 		}
 	}
@@ -263,24 +263,24 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 
 	// Start HTTPS server in a goroutine
 	go func() {
-		log.Printf("🚀 Starting HTTPS proxy server on port %d with TLS", cfg.TLS.Port)
+		slog.Info("Starting HTTPS proxy server with TLS", "port", cfg.TLS.Port)
 		if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
-			log.Printf("🔒 mTLS is enabled - client certificates will be verified")
+			slog.Info("mTLS is enabled - client certificates will be verified")
 		}
 
 		// Log the routing table
 		if len(cfg.TargetRoutes) > 0 {
-			log.Println("📝 Routing configuration:")
+			slog.Info("Routing configuration:")
 			for _, route := range cfg.TargetRoutes {
-				log.Printf("  %s -> %s", route.PathPrefix, route.TargetURL)
+				slog.Info("Route mapping", "path_prefix", route.PathPrefix, "target_url", route.TargetURL)
 			}
 		}
 		if cfg.HTTPTargetURL != "" {
-			log.Printf("  default -> %s", cfg.HTTPTargetURL)
+			slog.Info("Default route mapping", "target_url", cfg.HTTPTargetURL)
 		}
 
 		if err := server.ListenAndServeTLS(cfg.TLS.CertFile, cfg.TLS.KeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("🚨 HTTPS server error: %v", err)
+			slog.Error("HTTPS server error", "error", err)
 		}
 	}()
 
@@ -298,7 +298,7 @@ func createHTTPHandler(
 	// Initialize API validator if enabled
 	var apiValidator *validator.APIValidator
 	if cfg.APIValidation.Enabled {
-		log.Printf("🔍 Initializing OpenAPI validator from spec: %s", cfg.APIValidation.SpecPath)
+		slog.Info("Initializing OpenAPI validator from spec", "spec_path", cfg.APIValidation.SpecPath)
 		validatorOptions := validator.APIValidatorOptions{
 			EnableRequestValidation:  cfg.APIValidation.ValidateRequests,
 			EnableResponseValidation: cfg.APIValidation.ValidateResponses,
@@ -308,16 +308,15 @@ func createHTTPHandler(
 		var err error
 		apiValidator, err = validator.NewAPIValidator(cfg.APIValidation.SpecPath, validatorOptions)
 		if err != nil {
-			log.Printf("⚠️ Failed to initialize OpenAPI validator: %v", err)
+			slog.Warn("Failed to initialize OpenAPI validator", "error", err)
 		} else {
 			// Log API details
 			apiInfo := apiValidator.GetOpenAPIInfo()
-			log.Printf("🔍 Loaded OpenAPI spec: %s v%s", apiInfo["title"], apiInfo["version"])
-			log.Printf("🔍 Number of API paths: %s", apiInfo["paths"])
+			slog.Info("Loaded OpenAPI spec", "title", apiInfo["title"], "version", apiInfo["version"])
+			slog.Info("API paths loaded", "count", apiInfo["paths"])
 
 			// Log validation modes
-			log.Printf("🔍 Request validation: %v, Response validation: %v",
-				cfg.APIValidation.ValidateRequests, cfg.APIValidation.ValidateResponses)
+			slog.Info("API validation configuration", "request_validation", cfg.APIValidation.ValidateRequests, "response_validation", cfg.APIValidation.ValidateResponses)
 		}
 	}
 
@@ -384,10 +383,10 @@ func replayHTTPTraffic(w http.ResponseWriter, r *http.Request, database *sql.DB)
 	err := row.Scan(&status, &headersStr, &respBody)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("🕵️ No replay record found for HTTP %s %s", r.Method, r.URL.String())
+			slog.Info("No replay record found", "method", r.Method, "url", r.URL.String())
 			http.Error(w, "No matching replay record found", http.StatusNotFound)
 		} else {
-			log.Printf("🚨 DB error during HTTP replay lookup for %s %s: %v", r.Method, r.URL.String(), err)
+			slog.Error("DB error during HTTP replay lookup", "method", r.Method, "url", r.URL.String(), "error", err)
 			http.Error(w, "Database error during replay", http.StatusInternalServerError)
 		}
 		return
@@ -396,7 +395,7 @@ func replayHTTPTraffic(w http.ResponseWriter, r *http.Request, database *sql.DB)
 	// Parse and set headers
 	var headers http.Header
 	if err := json.Unmarshal([]byte(headersStr), &headers); err != nil {
-		log.Printf("⚠️ Error parsing stored headers for HTTP %s %s: %v", r.Method, r.URL.String(), err)
+		slog.Warn("Error parsing stored headers", "method", r.Method, "url", r.URL.String(), "error", err)
 		// Proceed without headers
 	} else {
 		for name, values := range headers {
@@ -413,10 +412,10 @@ func replayHTTPTraffic(w http.ResponseWriter, r *http.Request, database *sql.DB)
 		_, err := w.Write(respBody)
 		if err != nil {
 			// Log error if writing response fails (e.g., client disconnected)
-			log.Printf("⚠️ Error writing replayed HTTP response for %s %s: %v", r.Method, r.URL.String(), err)
+			slog.Warn("Error writing replayed HTTP response", "method", r.Method, "url", r.URL.String(), "error", err)
 		}
 	}
-	log.Printf("🔁 Replayed HTTP %d for %s %s", status, r.Method, r.URL.String())
+	slog.Info("Replayed HTTP response", "status", status, "method", r.Method, "url", r.URL.String())
 }
 
 // getClientIP extracts the client IP from the request
@@ -442,11 +441,10 @@ func getClientIP(r *http.Request) string {
 
 // saveTrafficRecord saves a traffic record to SQLite
 func saveTrafficRecord(record db.TrafficRecord, insertStmt *sql.Stmt) error {
-	log.Printf("💾 Attempting to save record %s to database...", record.ID)
+	slog.Info("Attempting to save record to database", "record_id", record.ID)
 
 	// Log record details in a structured way
-	log.Printf("📊 Record details: Method=%s, URL=%s, Status=%d, Size=%d bytes",
-		record.Method, record.URL, record.ResponseStatus, len(record.ResponseBody))
+	slog.Info("Record details", "method", record.Method, "url", record.URL, "status", record.ResponseStatus, "size_bytes", len(record.ResponseBody))
 
 	_, err := insertStmt.Exec(
 		record.ID,
@@ -472,7 +470,7 @@ func saveTrafficRecord(record db.TrafficRecord, insertStmt *sql.Stmt) error {
 		return fmt.Errorf("saving record %s: %w", record.ID, err)
 	}
 
-	log.Printf("✅ Record %s saved successfully", record.ID)
+	slog.Info("Record saved successfully", "record_id", record.ID)
 	return nil
 }
 
@@ -500,8 +498,8 @@ func handleHTTPRequest(
 
 	// Enhanced logging in record mode
 	if cfg.RecordingMode {
-		log.Printf("📥 Recording request: %s %s from %s", r.Method, r.URL.String(), clientIP)
-		log.Printf("📋 Request headers: %s", string(reqHeadersBytes))
+		slog.Info("Recording request", "method", r.Method, "url", r.URL.String(), "client_ip", clientIP)
+		slog.Info("Request headers", "headers", string(reqHeadersBytes))
 	}
 
 	// Clone request body if needed for recording/replay matching later
@@ -511,15 +509,15 @@ func handleHTTPRequest(
 		body, errRead := io.ReadAll(r.Body)
 		if errRead != nil {
 			reqBodyErr = fmt.Errorf("reading request body for recording: %w", errRead)
-			log.Printf("⚠️ Error cloning request body for %s %s: %v", r.Method, r.URL.String(), reqBodyErr)
+			slog.Warn("Error cloning request body", "method", r.Method, "url", r.URL.String(), "error", reqBodyErr)
 		} else {
 			reqBodyBytes = body
 			if cfg.RecordingMode && len(reqBodyBytes) > 0 {
 				// Log the request body in a readable format
 				if len(reqBodyBytes) > 1024 {
-					log.Printf("📄 Request body (truncated): %s...", string(reqBodyBytes[:1024]))
+					slog.Info("Request body (truncated)", "body", string(reqBodyBytes[:1024]))
 				} else {
-					log.Printf("📄 Request body: %s", string(reqBodyBytes))
+					slog.Info("Request body", "body", string(reqBodyBytes))
 				}
 			}
 			r.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
@@ -537,7 +535,7 @@ func handleHTTPRequest(
 		}
 
 		if err := apiValidator.ValidateRequest(reqCopy); err != nil {
-			log.Printf("⚠️ OpenAPI request validation failed for %s %s: %v", r.Method, r.URL.Path, err)
+			slog.Warn("OpenAPI request validation failed", "method", r.Method, "path", r.URL.Path, "error", err)
 
 			// If we're not continuing on validation errors, return immediately
 			if !cfg.APIValidation.ContinueOnValidation {
@@ -548,7 +546,7 @@ func handleHTTPRequest(
 			// Add validation error header if continuing
 			w.Header().Set("X-API-Validation-Error", "request")
 		} else {
-			log.Printf("✅ Request passed OpenAPI validation for %s %s", r.Method, r.URL.Path)
+			slog.Info("Request passed OpenAPI validation", "method", r.Method, "path", r.URL.Path)
 		}
 	}
 
@@ -579,7 +577,7 @@ func handleHTTPRequest(
 		// Log target URL in record mode
 		if cfg.RecordingMode {
 			targetURL := cfg.GetTargetURL(r.URL.Path)
-			log.Printf("🔄 Proxying request to target: %s", targetURL)
+			slog.Info("Proxying request to target", "target_url", targetURL)
 		}
 	}
 
@@ -592,13 +590,13 @@ func handleHTTPRequest(
 		respBody := recorder.body.Bytes()
 		err := apiValidator.ValidateResponse(r, recorder.statusCode, recorder.header, respBody)
 		if err != nil {
-			log.Printf("⚠️ OpenAPI response validation failed for %s %s: %v", r.Method, r.URL.Path, err)
+			slog.Warn("OpenAPI response validation failed", "method", r.Method, "path", r.URL.Path, "error", err)
 
 			// If not continuing on validation errors and response isn't sent yet, return error
 			if !cfg.APIValidation.ContinueOnValidation {
 				// At this point the response has already been sent to the client
 				// We can only log the error and add it to the record if recording
-				log.Printf("⚠️ Response already sent to client, cannot return validation error")
+				slog.Warn("Response already sent to client, cannot return validation error")
 			}
 
 			// If the response was already sent, add validation error header for the record
@@ -606,7 +604,7 @@ func handleHTTPRequest(
 				recorder.Header().Set("X-API-Validation-Error", "response")
 			}
 		} else {
-			log.Printf("✅ Response passed OpenAPI validation for %s %s", r.Method, r.URL.Path)
+			slog.Info("Response passed OpenAPI validation", "method", r.Method, "path", r.URL.Path)
 		}
 	}
 
@@ -620,24 +618,24 @@ func handleHTTPRequest(
 		respBodyBytes := recorder.body.Bytes()
 
 		// Enhanced logging for response
-		log.Printf("📤 Received response with status: %d in %d ms", recorder.statusCode, duration)
-		log.Printf("📋 Response headers: %s", string(respHeadersBytes))
+		slog.Info("Received response", "status", recorder.statusCode, "duration_ms", duration)
+		slog.Info("Response headers", "headers", string(respHeadersBytes))
 
 		// Log response body in a readable format (truncate if too large)
 		if len(respBodyBytes) > 0 {
 			if len(respBodyBytes) > 1024 {
-				log.Printf("📄 Response body (truncated): %s...", string(respBodyBytes[:1024]))
+				slog.Info("Response body (truncated)", "body", string(respBodyBytes[:1024]))
 			} else {
-				log.Printf("📄 Response body: %s", string(respBodyBytes))
+				slog.Info("Response body", "body", string(respBodyBytes))
 			}
 		} else {
-			log.Printf("📄 Response body: <empty>")
+			slog.Info("Response body: <empty>")
 		}
 
 		// Save the record asynchronously
 		go func() {
 			recordID := generateID()
-			log.Printf("💾 Saving traffic record ID: %s", recordID)
+			slog.Info("Saving traffic record", "record_id", recordID)
 
 			record := db.TrafficRecord{
 				ID:              recordID,
@@ -657,9 +655,9 @@ func handleHTTPRequest(
 			}
 
 			if err := saveTrafficRecord(record, insertStmt); err != nil {
-				log.Printf("⚠️ Error saving recorded HTTP traffic: %v", err)
+				slog.Warn("Error saving recorded HTTP traffic", "error", err)
 			} else {
-				log.Printf("✅ Successfully saved record %s to database", recordID)
+				slog.Info("Successfully saved record to database", "record_id", recordID)
 			}
 		}()
 	}

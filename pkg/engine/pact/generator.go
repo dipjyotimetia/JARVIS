@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,7 +80,7 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, specPath string) (*
 		testCode, err = g.generateTestCode(ctx, contract)
 		if err != nil {
 			// Log warning but don't fail
-			fmt.Printf("Warning: failed to generate test code: %v\n", err)
+			slog.Warn("Failed to generate test code", "error", err)
 		}
 	}
 
@@ -262,7 +263,7 @@ func (g *Generator) generateTestCode(ctx context.Context, contract *PactContract
 			return testCode, nil
 		}
 		// If template generation fails, fall back to AI generation
-		fmt.Printf("Warning: Template generation failed, falling back to AI: %v\n", err)
+		slog.Warn("Template generation failed, falling back to AI", "error", err)
 	}
 	
 	// Use AI to generate test code

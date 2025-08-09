@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -39,7 +40,7 @@ func SelectLanguage(pc PromptContent) string {
 		items = []string{"avro", "protobuf", "swagger", "openapi"}
 	default:
 		items = []string{}
-		fmt.Println("Invalid prompt type")
+		slog.Error("Invalid prompt type")
 	}
 	index := -1
 	var result string

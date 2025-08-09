@@ -2,7 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -37,13 +38,14 @@ These certificates are suitable for development and testing only.`,
 			keyPath = "./certs/server.key"
 		}
 
-		log.Printf("🔒 Generating self-signed certificate: %s", certPath)
-		log.Printf("🔑 Generating private key: %s", keyPath)
+		slog.Info("Generating self-signed certificate", "cert_path", certPath)
+		slog.Info("Generating private key", "key_path", keyPath)
 
 		start := time.Now()
 		err := certs.GenerateSelfSignedCert(certPath, keyPath)
 		if err != nil {
-			log.Fatalf("❌ Failed to generate certificates: %v", err)
+			slog.Error("Failed to generate certificates", "error", err)
+			os.Exit(1)
 		}
 
 		duration := time.Since(start).Round(time.Millisecond)

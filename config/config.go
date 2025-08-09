@@ -3,7 +3,7 @@ package config
 import (
 	"crypto/tls"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -226,7 +226,7 @@ func (c *Config) GetTLSConfig() *tls.Config {
 	if c.TLS.ClientAuth && c.TLS.ClientCertFile != "" && c.TLS.ClientKeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(c.TLS.ClientCertFile, c.TLS.ClientKeyFile)
 		if err != nil {
-			log.Printf("⚠️ Failed to load client certificates for mTLS: %v", err)
+			slog.Warn("Failed to load client certificates for mTLS", "error", err)
 		} else {
 			clientConfig.Certificates = []tls.Certificate{cert}
 		}

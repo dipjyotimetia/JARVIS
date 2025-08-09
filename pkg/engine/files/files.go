@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,7 +25,7 @@ func ListFiles(dir string) ([]string, error) {
 		// Read the file
 		data, err := os.ReadFile(path)
 		if err != nil {
-			log.Printf("Error reading file %s: %v", path, err)
+			slog.Warn("Error reading file", "path", path, "error", err)
 			return nil
 		}
 

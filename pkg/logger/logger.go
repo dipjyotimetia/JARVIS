@@ -4,6 +4,7 @@ package logger
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -47,25 +48,68 @@ type Logger struct {
 	level  LogLevel
 	output io.Writer
 	prefix string
+	slogger *slog.Logger
 }
 
 // New creates a new Logger instance with default settings
 func New(prefix string) *Logger {
+	opts := &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}
+	handler := slog.NewTextHandler(os.Stdout, opts)
 	return &Logger{
-		level:  InfoLevel,
-		output: os.Stdout,
-		prefix: prefix,
+		level:   InfoLevel,
+		output:  os.Stdout,
+		prefix:  prefix,
+		slogger: slog.New(handler),
 	}
 }
 
 // SetLevel sets the minimum log level
 func (l *Logger) SetLevel(level LogLevel) {
 	l.level = level
+	var slogLevel slog.Level
+	switch level {
+	case DebugLevel:
+		slogLevel = slog.LevelDebug
+	case InfoLevel:
+		slogLevel = slog.LevelInfo
+	case WarnLevel:
+		slogLevel = slog.LevelWarn
+	case ErrorLevel, FatalLevel:
+		slogLevel = slog.LevelError
+	}
+	opts := &slog.HandlerOptions{
+		Level: slogLevel,
+	}
+	handler := slog.NewTextHandler(l.output, opts)
+	l.slogger = slog.New(handler)
 }
 
 // SetOutput sets the output writer
 func (l *Logger) SetOutput(w io.Writer) {
 	l.output = w
+	opts := &slog.HandlerOptions{
+		Level: l.getSlogLevel(),
+	}
+	handler := slog.NewTextHandler(w, opts)
+	l.slogger = slog.New(handler)
+}
+
+// getSlogLevel converts internal LogLevel to slog.Level
+func (l *Logger) getSlogLevel() slog.Level {
+	switch l.level {
+	case DebugLevel:
+		return slog.LevelDebug
+	case InfoLevel:
+		return slog.LevelInfo
+	case WarnLevel:
+		return slog.LevelWarn
+	case ErrorLevel, FatalLevel:
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // log writes a log message with the specified level
@@ -74,18 +118,41 @@ func (l *Logger) log(level LogLevel, format string, args ...any) {
 		return
 	}
 
-	now := time.Now().Format("2006-01-02 15:04:05.000")
-	levelName := levelNames[level]
-	coloredLevel := levelColors[level](levelName)
-
-	prefix := ""
-	if l.prefix != "" {
-		prefix = fmt.Sprintf("[%s] ", l.prefix)
-	}
-
 	message := fmt.Sprintf(format, args...)
-	fmt.Fprintf(l.output, "%s %s %s%s\n", now, coloredLevel, prefix, message)
+	
+	// Use structured logging with slog for non-terminal outputs or when explicitly configured
+	if l.output != os.Stdout && l.output != os.Stderr {
+		var slogAttrs []slog.Attr
+		if l.prefix != "" {
+			slogAttrs = append(slogAttrs, slog.String("component", l.prefix))
+		}
+		
+		switch level {
+		case DebugLevel:
+			l.slogger.LogAttrs(nil, slog.LevelDebug, message, slogAttrs...)
+		case InfoLevel:
+			l.slogger.LogAttrs(nil, slog.LevelInfo, message, slogAttrs...)
+		case WarnLevel:
+			l.slogger.LogAttrs(nil, slog.LevelWarn, message, slogAttrs...)
+		case ErrorLevel:
+			l.slogger.LogAttrs(nil, slog.LevelError, message, slogAttrs...)
+		case FatalLevel:
+			l.slogger.LogAttrs(nil, slog.LevelError, message, slogAttrs...)
+		}
+	} else {
+		// Use colored output for terminal display
+		now := time.Now().Format("2006-01-02 15:04:05.000")
+		levelName := levelNames[level]
+		coloredLevel := levelColors[level](levelName)
 
+		prefix := ""
+		if l.prefix != "" {
+			prefix = fmt.Sprintf("[%s] ", l.prefix)
+		}
+
+		fmt.Fprintf(l.output, "%s %s %s%s\n", now, coloredLevel, prefix, message)
+	}
+	
 	// If this is a fatal message, exit the program
 	if level == FatalLevel {
 		os.Exit(1)

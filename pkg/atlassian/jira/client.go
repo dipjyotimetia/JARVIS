@@ -3,7 +3,7 @@ package jira
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	jira "github.com/ctreminiom/go-atlassian/v2/jira/v2"
@@ -31,7 +31,8 @@ type Client interface {
 func New(ctx context.Context) *client {
 	jiraClient, err := jira.New(nil, HOST)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Failed to create JIRA client", "error", err)
+		os.Exit(1)
 	}
 
 	jiraClient.Auth.SetBasicAuth(USER, ApiToken)

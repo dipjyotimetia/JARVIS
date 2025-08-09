@@ -3,7 +3,7 @@ package jira
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 )
 
@@ -80,7 +80,7 @@ func (c *client) SearchIssuesContext(ctx context.Context, jql string, maxResults
 		block, err := c.FetchIssueContext(ctx, key, includeComments, 5)
 		if err != nil {
 			// Continue on individual issue failures
-			log.Printf("jira: failed to fetch issue %s: %v", key, err)
+			slog.Warn("Failed to fetch issue", "key", key, "error", err)
 			continue
 		}
 		blocks = append(blocks, block)

@@ -2,7 +2,7 @@ package github
 
 import (
 	"errors"
-	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/google/go-github/v70/github"
@@ -45,7 +45,7 @@ func (c *Client) ChekPR() (string, error) {
 				Type: github.Diff,
 			})
 			if err != nil {
-				fmt.Println("Error fetching diff:", err)
+				slog.Error("Error fetching diff", "error", err)
 				return "", err
 			}
 			if len(diff) == 0 {

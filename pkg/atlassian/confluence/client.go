@@ -3,7 +3,7 @@ package confluence
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"regexp"
 	"strconv"
@@ -38,7 +38,8 @@ type Client interface {
 func New(ctx context.Context) *client {
 	confluenceClient, err := confluence.New(nil, HOST)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Failed to create Confluence client", "error", err)
+		os.Exit(1)
 	}
 
 	confluenceClient.Auth.SetBasicAuth(USER, ApiToken)

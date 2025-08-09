@@ -5,7 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -149,7 +149,7 @@ func (h *UIHandler) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 	var total int
 	err := h.database.QueryRow(countQuery, queryParams[:len(queryParams)-2]...).Scan(&total)
 	if err != nil {
-		log.Printf("🚨 Error counting transactions: %v", err)
+		slog.Error("Error counting transactions", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -157,7 +157,7 @@ func (h *UIHandler) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 	// Execute query
 	rows, err := h.database.Query(query, queryParams...)
 	if err != nil {
-		log.Printf("🚨 Error querying transactions: %v", err)
+		slog.Error("Error querying transactions", "error", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -170,7 +170,7 @@ func (h *UIHandler) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 		var respHeaders string
 		err := rows.Scan(&t.ID, &t.Timestamp, &t.Protocol, &t.Method, &t.URL, &t.Status, &t.Duration, &respHeaders)
 		if err != nil {
-			log.Printf("⚠️ Error scanning transaction row: %v", err)
+			slog.Warn("Error scanning transaction row", "error", err)
 			continue
 		}
 
@@ -231,7 +231,7 @@ func (h *UIHandler) handleTransactionDetail(w http.ResponseWriter, r *http.Reque
 		if err == sql.ErrNoRows {
 			http.Error(w, "Transaction not found", http.StatusNotFound)
 		} else {
-			log.Printf("🚨 Error querying transaction details: %v", err)
+			slog.Error("Error querying transaction details", "error", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
 		}
 		return

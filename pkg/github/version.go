@@ -2,6 +2,7 @@ package github
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -20,7 +21,7 @@ import (
 func CheckVersion() {
 	latestVersion, err := GetLatestVersion()
 	if err != nil {
-		fmt.Println("Error checking version:", err)
+		slog.Error("Error checking version", "error", err)
 		return
 	}
 
