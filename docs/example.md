@@ -1,9 +1,33 @@
-### Example Usage
-```md
-```sh
-go build -o ./dist -ldflags="-X 'github.com/dipjyotimetia/jarvis/cmd/cmd.version=0.0.2'" ./...
-.\dist\jarvis.exe generate-scenarios --path="specs/openapi/v3.0/mini_blog.yaml"
+# Jarvis Usage Examples
+
+This document provides comprehensive examples of using Jarvis for API testing and traffic inspection.
+
+## Getting Started
+
+Before running these examples, ensure you have:
+1. Jarvis installed and configured (see [setup.md](setup.md))
+2. Ollama running with appropriate models
+3. Sample specification files in your `specs/` directory
+
+## Generation Commands
+
+### Generate Test Scenarios
+
+Generate AI-powered test scenarios from OpenAPI specifications:
+
+```bash
+# Basic scenario generation
+jarvis gen generate-scenarios --path="specs/openapi/v3.0/mini_blog.yaml"
+
+# Generate from multiple specs
+jarvis gen generate-scenarios --path="specs/openapi/"
+
+# Interactive mode (prompts for spec type)
+jarvis gen generate-scenarios --path="specs/"
 ```
+
+**Example Output:**
+
 **Test Scenario 1: Retrieve All Blog Posts**
 
 * Precondition:
@@ -71,10 +95,22 @@ go build -o ./dist -ldflags="-X 'github.com/dipjyotimetia/jarvis/cmd/cmd.version
 ```
 
 
-```md
-```sh
- jarvis generate-test --path="specs/proto" --output="output"
+### Generate Test Code
+
+Generate complete test code from Protobuf specifications:
+
+```bash
+# Generate Go test code from Protobuf specs
+jarvis gen generate-test --path="specs/proto" --output="output"
+
+# Generate with interactive language selection
+jarvis gen generate-test --path="specs/proto/notify.proto" --output="./tests"
+
+# Batch generation from multiple proto files
+jarvis gen generate-test --path="specs/proto/" --output="./generated-tests"
 ```
+
+**Example Generated Test Code:**
 ```go
 import (
 	"context"
@@ -200,4 +236,324 @@ Close()
 }
 ```
 
+### Generate Pact Contracts
+
+Create consumer-driven contract tests from OpenAPI specifications:
+
+```bash
+# Basic contract generation
+jarvis gen generate-contracts \
+  --path="specs/openapi/v3.0/api.yaml" \
+  --consumer="web-frontend" \
+  --provider="user-service"
+
+# Generate with test code examples
+jarvis gen generate-contracts \
+  --path="specs/openapi/petstore.yaml" \
+  --consumer="mobile-app" \
+  --provider="petstore-api" \
+  --language="javascript" \
+  --framework="jest" \
+  --examples
+
+# Custom output directory
+jarvis gen generate-contracts \
+  --path="specs/openapi/" \
+  --consumer="client" \
+  --provider="server" \
+  --output="./pact-contracts"
+
+# Generate with Python/pytest
+jarvis gen generate-contracts \
+  --path="specs/openapi/blog.yaml" \
+  --consumer="blog-ui" \
+  --provider="blog-service" \
+  --language="python" \
+  --framework="pytest" \
+  --examples
 ```
+
+**Example Generated Files:**
+- `web-frontend-user-service-pact.json`: Pact contract file
+- `web_frontend_user_service_test.js`: Jest test file (with --examples)
+
+## Analysis Commands
+
+### Spec Analysis
+
+Analyze API specifications for completeness and potential issues:
+
+```bash
+# Analyze Protobuf specifications
+jarvis analyze spec-analyzer --path="specs/proto/"
+
+# Analyze OpenAPI specifications
+jarvis analyze spec-analyzer --path="specs/openapi/v3.0/"
+
+# Analyze specific file
+jarvis analyze spec-analyzer --path="specs/proto/user.proto"
+```
+
+**Example Output:**
+```
+Analyzing protobuf spec files...
+✅ Found 3 service definitions
+✅ Found 15 message types
+⚠️  Missing documentation for UserService.DeleteUser method
+✅ All required fields are properly defined
+📊 Analysis Summary:
+   - Services: 3
+   - Methods: 12
+   - Messages: 15
+   - Issues: 1 warning
+```
+
+## Utility Tools
+
+### gRPC Curl Generator
+
+Generate curl commands for testing gRPC services:
+
+```bash
+# Generate gRPC curl command
+jarvis tools grpc-curl \
+  --proto="specs/proto/user.proto" \
+  --service="UserService" \
+  --method="GetUser"
+
+# Generate for complex method
+jarvis tools grpc-curl \
+  --proto="specs/proto/notification.proto" \
+  --service="NotificationService" \
+  --method="CreateNotification"
+```
+
+**Example Output:**
+```bash
+# Generated gRPC curl command:
+grpcurl -plaintext \
+  -d '{"user_id": "12345"}' \
+  localhost:9000 \
+  user.UserService/GetUser
+```
+
+## Traffic Inspector Examples
+
+### Basic Proxy Usage
+
+Start the traffic inspector to monitor API calls:
+
+```bash
+# Start basic HTTP proxy
+jarvis proxy
+
+# Start with custom ports
+jarvis proxy --ui-port=9999
+
+# Recording mode - capture all traffic
+jarvis proxy --record
+
+# Replay previously recorded traffic
+jarvis proxy --replay
+```
+
+### HTTPS and TLS Examples
+
+```bash
+# Generate certificates first
+jarvis certificate --cert-dir ./certs
+
+# Start HTTPS proxy
+jarvis proxy --tls --cert ./certs/server.crt --key ./certs/server.key
+
+# Start with mutual TLS
+jarvis proxy --mtls \
+  --client-ca ./certs/ca.crt \
+  --client-cert ./certs/client.crt \
+  --client-key ./certs/client.key
+```
+
+### OpenAPI Validation
+
+```bash
+# Enable API validation
+jarvis proxy --api-validate --api-spec ./specs/openapi/api.yaml
+
+# Strict validation mode
+jarvis proxy \
+  --api-validate \
+  --api-spec ./specs/openapi/strict-api.yaml \
+  --strict-validation
+
+# Validate only requests
+jarvis proxy \
+  --api-validate \
+  --api-spec ./specs/openapi/api.yaml \
+  --validate-req \
+  --validate-resp=false
+```
+
+### Testing with the Proxy
+
+Once the proxy is running, test it with your API calls:
+
+```bash
+# Test through the proxy (proxy running on localhost:8080)
+curl -x http://localhost:8080 https://jsonplaceholder.typicode.com/posts/1
+
+# Direct API call through proxy
+curl http://localhost:8080/posts/1
+
+# POST request through proxy
+curl -X POST http://localhost:8080/posts \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test Post", "body": "This is a test", "userId": 1}'
+
+# View captured traffic in web UI
+open http://localhost:9090/ui/
+```
+
+## Configuration Examples
+
+### Using Config File
+
+Create a `config.yaml` file for persistent settings:
+
+```yaml
+# config.yaml
+http_port: 8080
+ui_port: 9090
+recording_mode: true
+sqlite_db_path: "./data/traffic.db"
+
+target_routes:
+  - path: "/api/users/*"
+    target: "https://jsonplaceholder.typicode.com"
+  - path: "/api/posts/*"
+    target: "https://jsonplaceholder.typicode.com"
+
+http_target_url: "https://httpbin.org"
+
+language:
+  preferred: "javascript"
+  framework: "jest"
+```
+
+Then run:
+```bash
+jarvis proxy --config config.yaml
+```
+
+### Environment Variables
+
+```bash
+# Set environment variables
+export JARVIS_OUTPUT_DIR="./custom-output"
+export JARVIS_CONFIG="./custom-config.yaml"
+
+# Commands will use these settings
+jarvis gen generate-test --path="specs/proto"
+```
+
+## Interactive Setup
+
+Use the setup wizard for guided configuration:
+
+```bash
+jarvis setup
+```
+
+This will prompt you through:
+1. AI API configuration
+2. Output directory selection
+3. Language and framework preferences
+4. Proxy settings
+5. Report format selection
+
+## Real-world Workflow Example
+
+Here's a complete workflow for API testing:
+
+```bash
+# 1. Initial setup
+jarvis setup
+
+# 2. Generate certificates for HTTPS testing
+jarvis certificate --cert-dir ./certs
+
+# 3. Analyze existing API specifications
+jarvis analyze spec-analyzer --path="specs/openapi/"
+
+# 4. Generate test scenarios
+jarvis gen generate-scenarios --path="specs/openapi/user-api.yaml"
+
+# 5. Generate Pact contracts
+jarvis gen generate-contracts \
+  --path="specs/openapi/user-api.yaml" \
+  --consumer="frontend" \
+  --provider="user-service" \
+  --language="javascript" \
+  --framework="jest" \
+  --examples
+
+# 6. Start traffic inspector with validation
+jarvis proxy \
+  --record \
+  --api-validate \
+  --api-spec ./specs/openapi/user-api.yaml \
+  --tls --cert ./certs/server.crt --key ./certs/server.key
+
+# 7. Run your tests against the proxy
+npm test  # or your test command
+
+# 8. View results in web UI
+open http://localhost:9090/ui/
+
+# 9. Stop recording and replay traffic
+# Stop with Ctrl+C, then:
+jarvis proxy --replay
+```
+
+## Advanced Examples
+
+### Custom Target Routing
+
+Configure path-based routing in `config.yaml`:
+
+```yaml
+target_routes:
+  - path: "/api/v1/users/*"
+    target: "https://users.service.com"
+  - path: "/api/v1/orders/*"
+    target: "https://orders.service.com"
+  - path: "/api/v1/payments/*"
+    target: "https://payments.service.com"
+  - path: "/health/*"
+    target: "http://localhost:8081"
+http_target_url: "https://api.fallback.com"  # Default for unmatched paths
+```
+
+### Batch Contract Generation
+
+Generate contracts for multiple services:
+
+```bash
+#!/bin/bash
+# batch-contracts.sh
+
+services=("user-service" "order-service" "payment-service")
+specs=("user-api.yaml" "order-api.yaml" "payment-api.yaml")
+
+for i in "${!services[@]}"; do
+  jarvis gen generate-contracts \
+    --path="specs/openapi/${specs[$i]}" \
+    --consumer="web-frontend" \
+    --provider="${services[$i]}" \
+    --language="typescript" \
+    --framework="jest" \
+    --examples \
+    --output="./contracts/${services[$i]}"
+done
+```
+
+This comprehensive guide demonstrates the full capability of Jarvis for API testing and traffic inspection workflows.
