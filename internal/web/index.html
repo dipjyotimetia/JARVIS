@@ -17,15 +17,17 @@
             --danger: #f44336;
             --info: #29b6f6;
             --light: #f8f9fa;
-            --dark: #212121;
-            --gray: #757575;
-            --gray-light: #e0e0e0;
+            --dark: #111827;
+            --gray: #6b7280;
+            --gray-light: #e5e7eb;
             --border-radius: 8px;
             --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
             --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
             --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
+
+    /* Dark theme removed for simplicity */
 
         * {
             box-sizing: border-box;
@@ -59,7 +61,7 @@
         header {
             background: linear-gradient(135deg, var(--primary), #2c3e50);
             color: white;
-            padding: 1.5rem 2rem;
+            padding: 1.2rem 2rem;
             box-shadow: var(--shadow);
         }
 
@@ -71,10 +73,11 @@
 
         h1 {
             margin: 0;
-            font-weight: 500;
+            font-weight: 600;
             display: flex;
             align-items: center;
             gap: 10px;
+            letter-spacing: 0.2px;
         }
 
         h1:before {
@@ -84,7 +87,7 @@
         }
 
         /* CSS property order - positioning, display & box model, other */
-        .card {
+    .card {
             /* Positioning */
             position: relative;
             z-index: 1;
@@ -106,7 +109,7 @@
             box-shadow: var(--shadow-lg);
         }
 
-        .card-header {
+    .card-header {
             padding: 1.2rem 1.5rem;
             border-bottom: 1px solid rgba(0, 0, 0, 0.06);
             font-weight: 600;
@@ -121,15 +124,15 @@
         }
 
         /* Filters */
-        .filters {
+    .filters {
             display: flex;
             flex-wrap: wrap;
             gap: 1rem;
             align-items: center;
         }
         
-        .filters input,
-        .filters select {
+    .filters input,
+    .filters select {
             padding: 0.7rem 1rem;
             border: 1px solid var(--gray-light);
             border-radius: var(--border-radius);
@@ -146,7 +149,7 @@
             box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.15);
         }
 
-        .button {
+    .button {
             padding: 0.7rem 1.2rem;
             color: white;
             border: none;
@@ -396,7 +399,7 @@
             opacity: 1;
         }
 
-        /* Tabs */
+    /* Tabs */
         .tab-container {
             margin-top: 1.5rem;
             border: 1px solid #edf2f7;
@@ -435,16 +438,35 @@
             display: block;
         }
 
+        .code-block {
+            position: relative;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: var(--transition);
+        }
+        .copy-btn:hover { opacity: 1; }
         pre {
-            background: #f8fafc;
+            background: #0b1220;
             margin: 0;
             padding: 1.2rem;
             overflow: auto;
             font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
             font-size: 0.9rem;
-            max-height: 400px;
-            color: #334155;
+            max-height: 420px;
+            color: #e5e7eb;
             line-height: 1.7;
+            border-radius: 8px;
         }
 
         /* Utilities */
@@ -568,6 +590,52 @@
             box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
             transform: translateY(-2px);
         }
+
+        /* Header controls */
+        .header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .header-actions { display: flex; gap: .5rem; align-items: center; }
+        .icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .4rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 8px;
+            background: rgba(255,255,255,.12);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,.15);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .icon-button:hover { background: rgba(255,255,255,.22); }
+
+        /* Input with icon */
+        .input-icon { position: relative; }
+        .input-icon .fa-search { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--gray); }
+        .input-icon input { padding-left: 2.2rem; }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            background: #111827;
+            color: #fff;
+            padding: .7rem 1rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(10px);
+            transition: var(--transition);
+            z-index: 1100;
+        }
+        #toast.show { opacity: 1; transform: translateY(0); }
 
         @keyframes spinner {
             to {
@@ -753,8 +821,14 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
     
     <header role="banner">
-        <div class="container">
+        <div class="container header-bar">
             <h1>Traffic Inspector</h1>
+            <div class="header-actions">
+                <button id="refresh-btn" class="icon-button" title="Refresh">
+                    <i class="fa fa-rotate"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -765,7 +839,10 @@
             </div>
             <div class="card-body">
                 <div class="filters">
-                    <input type="text" id="url-filter" placeholder="Filter by URL" aria-label="Filter by URL">
+                    <div class="input-icon">
+                        <i class="fa fa-search" aria-hidden="true"></i>
+                        <input type="text" id="url-filter" placeholder="Filter by URL" aria-label="Filter by URL">
+                    </div>
                     <select id="method-filter" aria-label="Filter by method">
                         <option value="">All Methods</option>
                         <option value="GET">GET</option>
@@ -870,10 +947,16 @@
                         <div class="tab" id="tab-req-body" role="tab" aria-selected="false" aria-controls="req-body" data-tab="req-body" tabindex="0">Body</div>
                     </div>
                     <div class="tab-content active" id="req-headers" role="tabpanel" aria-labelledby="tab-req-headers">
-                        <pre id="detail-req-headers"></pre>
+                        <div class="code-block">
+                            <button class="copy-btn" data-target="detail-req-headers"><i class="fa fa-copy"></i> Copy</button>
+                            <pre id="detail-req-headers"></pre>
+                        </div>
                     </div>
                     <div class="tab-content" id="req-body" role="tabpanel" aria-labelledby="tab-req-body">
-                        <pre id="detail-req-body"></pre>
+                        <div class="code-block">
+                            <button class="copy-btn" data-target="detail-req-body"><i class="fa fa-copy"></i> Copy</button>
+                            <pre id="detail-req-body"></pre>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -896,10 +979,16 @@
                         <div class="tab" id="tab-resp-body" role="tab" aria-selected="false" aria-controls="resp-body" data-tab="resp-body" tabindex="0">Body</div>
                     </div>
                     <div class="tab-content active" id="resp-headers" role="tabpanel" aria-labelledby="tab-resp-headers">
-                        <pre id="detail-resp-headers"></pre>
+                        <div class="code-block">
+                            <button class="copy-btn" data-target="detail-resp-headers"><i class="fa fa-copy"></i> Copy</button>
+                            <pre id="detail-resp-headers"></pre>
+                        </div>
                     </div>
                     <div class="tab-content" id="resp-body" role="tabpanel" aria-labelledby="tab-resp-body">
-                        <pre id="detail-resp-body"></pre>
+                        <div class="code-block">
+                            <button class="copy-btn" data-target="detail-resp-body"><i class="fa fa-copy"></i> Copy</button>
+                            <pre id="detail-resp-body"></pre>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -943,6 +1032,8 @@
         </tr>
     </template>
 
+    <div id="toast" role="status" aria-live="polite"></div>
+
     <script>
         let currentPage = 1;
         let pageSize = 50;
@@ -972,7 +1063,7 @@
         }
 
         // Event Listeners
-        document.addEventListener('DOMContentLoaded', loadTransactions);
+    document.addEventListener('DOMContentLoaded', loadTransactions);
         
         prevPageBtn.addEventListener('click', () => {
             if (currentPage > 1) {
@@ -998,6 +1089,32 @@
             currentPage = 1;
             loadTransactions();
         }, 300));
+
+        // Refresh
+        const refreshBtn = document.getElementById('refresh-btn');
+        refreshBtn.addEventListener('click', loadTransactions);
+
+        // Copy buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.copy-btn')) {
+                const btn = e.target.closest('.copy-btn');
+                const targetId = btn.getAttribute('data-target');
+                const pre = document.getElementById(targetId);
+                if (pre) {
+                    navigator.clipboard.writeText(pre.textContent || '')
+                        .then(() => showToast('Copied to clipboard'))
+                        .catch(() => showToast('Copy failed'));
+                }
+            }
+        });
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(() => toast.classList.remove('show'), 1800);
+        }
         
         applyFiltersBtn.addEventListener('click', () => {
             currentPage = 1;

@@ -166,6 +166,9 @@ func init() {
 
 	proxyCmd.Flags().BoolP("record", "r", false, "Run in recording mode")
 	proxyCmd.Flags().BoolP("replay", "p", false, "Run in replay mode")
+	// HTTP options
+	proxyCmd.Flags().Int("http-port", 8080, "HTTP proxy port")
+	proxyCmd.Flags().String("target-url", "", "Default target URL for proxying (used when no route matches)")
 	proxyCmd.Flags().Bool("tls", false, "Enable TLS")
 	proxyCmd.Flags().String("cert", "", "TLS certificate file path")
 	proxyCmd.Flags().String("key", "", "TLS key file path")
@@ -196,13 +199,17 @@ func init() {
 		return []string{"5", "10", "30", "60"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	// Add validation for UI and TLS ports
+	// Add validation for UI, HTTP and TLS ports
 	proxyCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		uiPort, _ := cmd.Flags().GetInt("ui-port")
+		httpPort, _ := cmd.Flags().GetInt("http-port")
 		tlsPort, _ := cmd.Flags().GetInt("tls-port")
 
 		if uiPort < 1024 || uiPort > 65535 {
 			return fmt.Errorf("ui-port must be between 1024 and 65535")
+		}
+		if httpPort < 1 || httpPort > 65535 {
+			return fmt.Errorf("http-port must be between 1 and 65535")
 		}
 
 		if tlsPort < 1024 || tlsPort > 65535 {
@@ -217,28 +224,7 @@ func init() {
 		return nil
 	}
 
-	viper.BindPFlag("ui_port", proxyCmd.Flags().Lookup("ui-port"))
-	viper.BindPFlag("recording_mode", proxyCmd.Flags().Lookup("record"))
-	viper.BindPFlag("replay_mode", proxyCmd.Flags().Lookup("replay"))
-	viper.BindPFlag("tls.enabled", proxyCmd.Flags().Lookup("tls"))
-	viper.BindPFlag("tls.cert_file", proxyCmd.Flags().Lookup("cert"))
-	viper.BindPFlag("tls.key_file", proxyCmd.Flags().Lookup("key"))
-	viper.BindPFlag("tls.port", proxyCmd.Flags().Lookup("tls-port"))
-	viper.BindPFlag("tls.allow_insecure", proxyCmd.Flags().Lookup("insecure"))
-
-	// Bind mTLS flags
-	viper.BindPFlag("tls.client_auth", proxyCmd.Flags().Lookup("mtls"))
-	viper.BindPFlag("tls.client_ca_cert", proxyCmd.Flags().Lookup("client-ca"))
-	viper.BindPFlag("tls.client_cert_file", proxyCmd.Flags().Lookup("client-cert"))
-	viper.BindPFlag("tls.client_key_file", proxyCmd.Flags().Lookup("client-key"))
-
-	// Bind OpenAPI validation flags
-	viper.BindPFlag("api_validation.enabled", proxyCmd.Flags().Lookup("api-validate"))
-	viper.BindPFlag("api_validation.spec_path", proxyCmd.Flags().Lookup("api-spec"))
-	viper.BindPFlag("api_validation.validate_requests", proxyCmd.Flags().Lookup("validate-req"))
-	viper.BindPFlag("api_validation.validate_responses", proxyCmd.Flags().Lookup("validate-resp"))
-	viper.BindPFlag("api_validation.strict_mode", proxyCmd.Flags().Lookup("strict-validation"))
-	viper.BindPFlag("api_validation.continue_on_validation", proxyCmd.Flags().Lookup("continue-on-error"))
+	conf.BindProxyFlags(proxyCmd)
 }
 
 func getMode(cfg *conf.Config) string {

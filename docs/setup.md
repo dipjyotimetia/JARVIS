@@ -60,6 +60,15 @@ This wizard will guide you through:
 
 ## Manual Configuration
 
+### Config Sources & Precedence
+
+Jarvis reads configuration from multiple sources with the following priority (highest wins):
+
+1) CLI flags (e.g., `--http-port 8081`)
+2) Environment variables (prefix `JARVIS_`, dots become underscores)
+3) Config file (default `./config.yaml`)
+4) Built-in defaults
+
 ### Environment Variables
 
 Set these environment variables for advanced configuration:
@@ -73,6 +82,13 @@ export JARVIS_CONFIG="./custom-config.yaml"
 
 # Optional: Default output directory
 export JARVIS_OUTPUT_DIR="./jarvis-output"
+
+# Proxy
+export JARVIS_HTTP_PORT=8080
+export JARVIS_UI_PORT=9090
+export JARVIS_TLS_ENABLED=false
+export JARVIS_TLS_PORT=8443
+export JARVIS_API_VALIDATION_ENABLED=false
 ```
 
 ### Configuration File
@@ -174,6 +190,32 @@ curl http://localhost:11434/api/tags
 # Generate a simple test scenario
 jarvis gen generate-scenarios --path="./specs/openapi/example.yaml"
 ```
+
+## Docker Model Runner (Alternative local models)
+
+If you prefer to run models via Docker with an OpenAI-compatible API, Docker Model Runner is a great option.
+
+Docs: https://docs.docker.com/ai/model-runner/
+
+Typical flow (consult the docs for the exact image and parameters for your target model):
+
+1. Install and run Docker Desktop
+2. Start a Model Runner container that exposes an OpenAI-compatible API (often on `http://localhost:8080/v1`)
+3. Smoke test the endpoint:
+
+```bash
+curl -s http://localhost:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "llama3.2",
+    "messages": [{"role": "user", "content": "Write one API test idea for a blog service."}]
+  }'
+```
+
+How this relates to Jarvis:
+- Jarvis currently ships with native Ollama integration for offline models.
+- You can run Docker Model Runner side-by-side for experiments or external tools that expect OpenAI-compatible endpoints.
+- If you want Jarvis to talk to an OpenAI-compatible endpoint directly, consider opening an issue or a PR—this is a good future enhancement.
 
 ## Certificate Setup (for HTTPS)
 

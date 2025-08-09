@@ -3,11 +3,9 @@ package proxy
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,12 +18,12 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dipjyotimetia/jarvis/config"
 	"github.com/dipjyotimetia/jarvis/internal/db"
 	"github.com/dipjyotimetia/jarvis/internal/validator"
+	"github.com/google/uuid"
 )
 
 // Server interface allows for mocking in tests
@@ -33,32 +31,7 @@ type Server interface {
 	Shutdown(ctx context.Context) error
 }
 
-// bufferPool for reusing byte slices
-var bufferPool = sync.Pool{
-	New: func() any {
-		// Start with 4KB, can grow
-		b := make([]byte, 0, 4*1024)
-		return &b // Store pointers to slices
-	},
-}
-
-// Helper to get a buffer from the pool
-func getBuffer() *bytes.Buffer {
-	buf := bufferPool.Get().(*[]byte)
-	*buf = (*buf)[:0] // Reset slice length, keep capacity
-	return bytes.NewBuffer(*buf)
-}
-
-// Helper to put a buffer back into the pool
-func putBuffer(buf *bytes.Buffer) {
-	// If the buffer didn't grow excessively large, put it back
-	// This prevents keeping very large buffers in the pool indefinitely
-	const maxBufferSize = 1 * 1024 * 1024 // 1MB limit
-	if buf != nil && buf.Cap() <= maxBufferSize {
-		b := buf.Bytes()
-		bufferPool.Put(&b) // Store pointer to the underlying slice
-	}
-}
+// (removed custom []byte buffer pool used for request cloning to avoid unsafe aliasing)
 
 // StartHTTPProxy starts the HTTP proxy server
 func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertStmt *sql.Stmt) Server {
@@ -77,6 +50,7 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 		// Update request URL with correct scheme, host, etc. but keep the original path
 		originalPath := req.URL.Path
 		originalQuery := req.URL.RawQuery
+		originalHost := req.Host
 
 		// Set the scheme, host, etc. from the target
 		*req.URL = *target
@@ -87,7 +61,21 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 
 		// Set host header to target host
 		req.Host = target.Host
-		req.Header.Del("X-Forwarded-For")
+		// Forwarding headers
+		if ip, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+			if prior := req.Header.Get("X-Forwarded-For"); prior != "" {
+				req.Header.Set("X-Forwarded-For", prior+", "+ip)
+			} else {
+				req.Header.Set("X-Forwarded-For", ip)
+			}
+		}
+		// Preserve original host in X-Forwarded-Host
+		req.Header.Set("X-Forwarded-Host", originalHost)
+		if req.TLS != nil {
+			req.Header.Set("X-Forwarded-Proto", "https")
+		} else {
+			req.Header.Set("X-Forwarded-Proto", "http")
+		}
 	}
 
 	// Create a custom ReverseProxy with our director
@@ -106,6 +94,8 @@ func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertS
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			ResponseHeaderTimeout: 20 * time.Second,
+			// Allow outbound HTTPS targets to respect TLS settings
+			TLSClientConfig: cfg.GetTLSConfig(),
 		},
 		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("🚨 HTTP proxy error: %v", err)
@@ -176,6 +166,7 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 		// Update request URL with correct scheme, host, etc. but keep the original path
 		originalPath := req.URL.Path
 		originalQuery := req.URL.RawQuery
+		originalHost := req.Host
 
 		// Set the scheme, host, etc. from the target
 		*req.URL = *target
@@ -186,7 +177,20 @@ func StartHTTPSProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insert
 
 		// Set host header to target host
 		req.Host = target.Host
-		req.Header.Del("X-Forwarded-For")
+		// Forwarding headers
+		if ip, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+			if prior := req.Header.Get("X-Forwarded-For"); prior != "" {
+				req.Header.Set("X-Forwarded-For", prior+", "+ip)
+			} else {
+				req.Header.Set("X-Forwarded-For", ip)
+			}
+		}
+		req.Header.Set("X-Forwarded-Host", originalHost)
+		if req.TLS != nil {
+			req.Header.Set("X-Forwarded-Proto", "https")
+		} else {
+			req.Header.Set("X-Forwarded-Proto", "http")
+		}
 	}
 
 	// Create a custom ReverseProxy with our director
@@ -474,15 +478,7 @@ func saveTrafficRecord(record db.TrafficRecord, insertStmt *sql.Stmt) error {
 
 // generateID creates a unique ID for a traffic record
 func generateID() string {
-	// Use atomic counter to avoid collisions
-	var idCounter uint64
-	id := atomic.AddUint64(&idCounter, 1)
-
-	// Add some randomness
-	buf := make([]byte, 4)
-	rand.Read(buf)
-
-	return fmt.Sprintf("%d-%x", id, hex.EncodeToString(buf))
+	return uuid.NewString()
 }
 
 // handleHTTPRequest contains the logic for processing each HTTP request
@@ -512,16 +508,12 @@ func handleHTTPRequest(
 	var reqBodyBytes []byte
 	var reqBodyErr error
 	if (cfg.RecordingMode || (apiValidator != nil && cfg.APIValidation.ValidateRequests)) && r.Body != nil && r.ContentLength != 0 {
-		buf := getBuffer()
-		defer putBuffer(buf)
-
-		teeReader := io.TeeReader(r.Body, buf)
-		_, errRead := io.ReadAll(teeReader)
+		body, errRead := io.ReadAll(r.Body)
 		if errRead != nil {
 			reqBodyErr = fmt.Errorf("reading request body for recording: %w", errRead)
 			log.Printf("⚠️ Error cloning request body for %s %s: %v", r.Method, r.URL.String(), reqBodyErr)
 		} else {
-			reqBodyBytes = buf.Bytes()
+			reqBodyBytes = body
 			if cfg.RecordingMode && len(reqBodyBytes) > 0 {
 				// Log the request body in a readable format
 				if len(reqBodyBytes) > 1024 {

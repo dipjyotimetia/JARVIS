@@ -6,7 +6,7 @@ This document provides comprehensive examples of using Jarvis for API testing an
 
 Before running these examples, ensure you have:
 1. Jarvis installed and configured (see [setup.md](setup.md))
-2. Ollama running with appropriate models
+2. A local model provider: either Ollama (native) or Docker Model Runner (OpenAI-compatible). See Setup for both options.
 3. Sample specification files in your `specs/` directory
 
 ## Generation Commands

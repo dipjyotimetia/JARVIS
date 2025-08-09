@@ -10,37 +10,37 @@ import (
 
 // DetailedValidationResult provides comprehensive validation feedback
 type DetailedValidationResult struct {
-	Valid               bool                      `json:"valid"`
-	Errors             []ValidationError         `json:"errors,omitempty"`
-	Warnings           []ValidationWarning       `json:"warnings,omitempty"`
-	Suggestions        []ValidationSuggestion    `json:"suggestions,omitempty"`
-	InteractionResults []InteractionValidation   `json:"interactionResults,omitempty"`
-	Metadata           ValidationMetadata        `json:"metadata"`
+	Valid              bool                    `json:"valid"`
+	Errors             []ValidationError       `json:"errors,omitempty"`
+	Warnings           []ValidationWarning     `json:"warnings,omitempty"`
+	Suggestions        []ValidationSuggestion  `json:"suggestions,omitempty"`
+	InteractionResults []InteractionValidation `json:"interactionResults,omitempty"`
+	Metadata           ValidationMetadata      `json:"metadata"`
 }
 
 // ValidationError represents a validation error with context
 type ValidationError struct {
-	Code        string `json:"code"`
-	Message     string `json:"message"`
-	Location    string `json:"location"`
-	Severity    string `json:"severity"`
-	Suggestion  string `json:"suggestion,omitempty"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Location   string `json:"location"`
+	Severity   string `json:"severity"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 // ValidationWarning represents a validation warning
 type ValidationWarning struct {
-	Code        string `json:"code"`
-	Message     string `json:"message"`
-	Location    string `json:"location"`
-	Suggestion  string `json:"suggestion,omitempty"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Location   string `json:"location"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 // ValidationSuggestion represents an improvement suggestion
 type ValidationSuggestion struct {
-	Type        string `json:"type"`
-	Message     string `json:"message"`
-	Location    string `json:"location"`
-	Example     string `json:"example,omitempty"`
+	Type     string `json:"type"`
+	Message  string `json:"message"`
+	Location string `json:"location"`
+	Example  string `json:"example,omitempty"`
 }
 
 // InteractionValidation represents validation results for a single interaction
@@ -54,9 +54,9 @@ type InteractionValidation struct {
 
 // ValidationMetadata contains metadata about the validation process
 type ValidationMetadata struct {
-	TotalInteractions    int    `json:"totalInteractions"`
-	ValidInteractions    int    `json:"validInteractions"`
-	InvalidInteractions  int    `json:"invalidInteractions"`
+	TotalInteractions   int    `json:"totalInteractions"`
+	ValidInteractions   int    `json:"validInteractions"`
+	InvalidInteractions int    `json:"invalidInteractions"`
 	SpecVersion         string `json:"specVersion"`
 	ValidationTime      string `json:"validationTime"`
 }
@@ -80,11 +80,11 @@ func NewEnhancedValidator(strictMode bool) *EnhancedValidator {
 		strictMode: strictMode,
 		rules:      getDefaultValidationRules(),
 	}
-	
+
 	if strictMode {
 		validator.rules = append(validator.rules, getStrictValidationRules()...)
 	}
-	
+
 	return validator
 }
 
@@ -92,13 +92,13 @@ func NewEnhancedValidator(strictMode bool) *EnhancedValidator {
 func (v *EnhancedValidator) ValidateDetailed(contract *PactContract) *DetailedValidationResult {
 	result := &DetailedValidationResult{
 		Valid:              true,
-		Errors:            []ValidationError{},
-		Warnings:          []ValidationWarning{},
-		Suggestions:       []ValidationSuggestion{},
+		Errors:             []ValidationError{},
+		Warnings:           []ValidationWarning{},
+		Suggestions:        []ValidationSuggestion{},
 		InteractionResults: []InteractionValidation{},
 		Metadata: ValidationMetadata{
 			TotalInteractions: len(contract.Interactions),
-			SpecVersion:      contract.Metadata.PactSpecification.Version,
+			SpecVersion:       contract.Metadata.PactSpecification.Version,
 		},
 	}
 
@@ -116,7 +116,7 @@ func (v *EnhancedValidator) ValidateDetailed(contract *PactContract) *DetailedVa
 	for i, interaction := range contract.Interactions {
 		interactionResult := v.validateInteraction(i, &interaction)
 		result.InteractionResults = append(result.InteractionResults, interactionResult)
-		
+
 		if interactionResult.Valid {
 			validInteractions++
 		} else {
@@ -148,10 +148,10 @@ func (v *EnhancedValidator) validateInteraction(index int, interaction *Interact
 	// Validate description
 	if strings.TrimSpace(interaction.Description) == "" {
 		result.Errors = append(result.Errors, ValidationError{
-			Code:     "MISSING_DESCRIPTION",
-			Message:  "Interaction description is required",
-			Location: location + ".description",
-			Severity: "error",
+			Code:       "MISSING_DESCRIPTION",
+			Message:    "Interaction description is required",
+			Location:   location + ".description",
+			Severity:   "error",
 			Suggestion: "Add a clear, descriptive name for this interaction",
 		})
 		result.Valid = false
@@ -163,10 +163,19 @@ func (v *EnhancedValidator) validateInteraction(index int, interaction *Interact
 		result.Valid = false
 	}
 
-	// Validate response
+	// Validate response (classify severity)
 	if err := v.validateResponse(interaction.Response, location+".response"); err != nil {
-		result.Errors = append(result.Errors, *err)
-		result.Valid = false
+		if strings.EqualFold(err.Severity, "warning") {
+			result.Warnings = append(result.Warnings, ValidationWarning{
+				Code:       err.Code,
+				Message:    err.Message,
+				Location:   err.Location,
+				Suggestion: err.Suggestion,
+			})
+		} else {
+			result.Errors = append(result.Errors, *err)
+			result.Valid = false
+		}
 	}
 
 	// Check for best practices
@@ -181,10 +190,10 @@ func (v *EnhancedValidator) validateRequest(request PactRequest, location string
 	// Validate HTTP method
 	if request.Method == "" {
 		return &ValidationError{
-			Code:     "MISSING_METHOD",
-			Message:  "Request method is required",
-			Location: location + ".method",
-			Severity: "error",
+			Code:       "MISSING_METHOD",
+			Message:    "Request method is required",
+			Location:   location + ".method",
+			Severity:   "error",
 			Suggestion: "Specify a valid HTTP method (GET, POST, PUT, DELETE, etc.)",
 		}
 	}
@@ -192,10 +201,10 @@ func (v *EnhancedValidator) validateRequest(request PactRequest, location string
 	validMethods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
 	if !contains(validMethods, strings.ToUpper(request.Method)) {
 		return &ValidationError{
-			Code:     "INVALID_METHOD",
-			Message:  fmt.Sprintf("Invalid HTTP method: %s", request.Method),
-			Location: location + ".method",
-			Severity: "error",
+			Code:       "INVALID_METHOD",
+			Message:    fmt.Sprintf("Invalid HTTP method: %s", request.Method),
+			Location:   location + ".method",
+			Severity:   "error",
 			Suggestion: fmt.Sprintf("Use one of: %s", strings.Join(validMethods, ", ")),
 		}
 	}
@@ -203,20 +212,20 @@ func (v *EnhancedValidator) validateRequest(request PactRequest, location string
 	// Validate path
 	if request.Path == "" {
 		return &ValidationError{
-			Code:     "MISSING_PATH",
-			Message:  "Request path is required",
-			Location: location + ".path",
-			Severity: "error",
+			Code:       "MISSING_PATH",
+			Message:    "Request path is required",
+			Location:   location + ".path",
+			Severity:   "error",
 			Suggestion: "Specify a valid URL path starting with '/'",
 		}
 	}
 
 	if !strings.HasPrefix(request.Path, "/") {
 		return &ValidationError{
-			Code:     "INVALID_PATH",
-			Message:  "Request path must start with '/'",
-			Location: location + ".path",
-			Severity: "error",
+			Code:       "INVALID_PATH",
+			Message:    "Request path must start with '/'",
+			Location:   location + ".path",
+			Severity:   "error",
 			Suggestion: "Ensure path starts with '/' character",
 		}
 	}
@@ -224,10 +233,10 @@ func (v *EnhancedValidator) validateRequest(request PactRequest, location string
 	// Validate URL encoding
 	if _, err := url.Parse(request.Path); err != nil {
 		return &ValidationError{
-			Code:     "INVALID_URL",
-			Message:  fmt.Sprintf("Invalid URL path: %v", err),
-			Location: location + ".path",
-			Severity: "error",
+			Code:       "INVALID_URL",
+			Message:    fmt.Sprintf("Invalid URL path: %v", err),
+			Location:   location + ".path",
+			Severity:   "error",
 			Suggestion: "Ensure path is properly URL-encoded",
 		}
 	}
@@ -240,20 +249,20 @@ func (v *EnhancedValidator) validateResponse(response PactResponse, location str
 	// Validate status code
 	if response.Status == 0 {
 		return &ValidationError{
-			Code:     "MISSING_STATUS",
-			Message:  "Response status code is required",
-			Location: location + ".status",
-			Severity: "error",
+			Code:       "MISSING_STATUS",
+			Message:    "Response status code is required",
+			Location:   location + ".status",
+			Severity:   "error",
 			Suggestion: "Specify a valid HTTP status code (200, 404, 500, etc.)",
 		}
 	}
 
 	if response.Status < 100 || response.Status > 599 {
 		return &ValidationError{
-			Code:     "INVALID_STATUS",
-			Message:  fmt.Sprintf("Invalid HTTP status code: %d", response.Status),
-			Location: location + ".status",
-			Severity: "error",
+			Code:       "INVALID_STATUS",
+			Message:    fmt.Sprintf("Invalid HTTP status code: %d", response.Status),
+			Location:   location + ".status",
+			Severity:   "error",
 			Suggestion: "Use a valid HTTP status code between 100-599",
 		}
 	}
@@ -262,10 +271,10 @@ func (v *EnhancedValidator) validateResponse(response PactResponse, location str
 	if response.Body != nil {
 		if headers, ok := response.Headers["Content-Type"]; !ok || headers == nil {
 			return &ValidationError{
-				Code:     "MISSING_CONTENT_TYPE",
-				Message:  "Content-Type header is recommended when response has a body",
-				Location: location + ".headers",
-				Severity: "warning",
+				Code:       "MISSING_CONTENT_TYPE",
+				Message:    "Content-Type header is recommended when response has a body",
+				Location:   location + ".headers",
+				Severity:   "warning",
 				Suggestion: "Add Content-Type header to specify response format",
 			}
 		}
@@ -281,9 +290,9 @@ func (v *EnhancedValidator) checkInteractionBestPractices(interaction *Interacti
 	// Check description quality
 	if len(interaction.Description) < 10 {
 		warnings = append(warnings, ValidationWarning{
-			Code:     "SHORT_DESCRIPTION",
-			Message:  "Interaction description is very short",
-			Location: location + ".description",
+			Code:       "SHORT_DESCRIPTION",
+			Message:    "Interaction description is very short",
+			Location:   location + ".description",
 			Suggestion: "Provide a more descriptive name that explains what this interaction tests",
 		})
 	}
@@ -291,9 +300,9 @@ func (v *EnhancedValidator) checkInteractionBestPractices(interaction *Interacti
 	// Check for provider state usage
 	if strings.TrimSpace(interaction.ProviderState) == "" && v.strictMode {
 		warnings = append(warnings, ValidationWarning{
-			Code:     "MISSING_PROVIDER_STATE",
-			Message:  "Provider state is not specified",
-			Location: location + ".providerState",
+			Code:       "MISSING_PROVIDER_STATE",
+			Message:    "Provider state is not specified",
+			Location:   location + ".providerState",
 			Suggestion: "Consider adding provider state to make tests more reliable",
 		})
 	}
@@ -301,9 +310,9 @@ func (v *EnhancedValidator) checkInteractionBestPractices(interaction *Interacti
 	// Check request headers
 	if interaction.Request.Headers == nil || len(interaction.Request.Headers) == 0 {
 		warnings = append(warnings, ValidationWarning{
-			Code:     "NO_REQUEST_HEADERS",
-			Message:  "No request headers specified",
-			Location: location + ".request.headers",
+			Code:       "NO_REQUEST_HEADERS",
+			Message:    "No request headers specified",
+			Location:   location + ".request.headers",
 			Suggestion: "Consider adding relevant headers like Accept, Authorization, etc.",
 		})
 	}
@@ -318,10 +327,10 @@ func (v *EnhancedValidator) generateSuggestions(contract *PactContract, _ *Detai
 	// Suggest adding more interactions if only one exists
 	if len(contract.Interactions) == 1 {
 		suggestions = append(suggestions, ValidationSuggestion{
-			Type:    "completeness",
-			Message: "Consider adding more interactions to improve test coverage",
+			Type:     "completeness",
+			Message:  "Consider adding more interactions to improve test coverage",
 			Location: "interactions",
-			Example: "Add interactions for error scenarios, edge cases, and different endpoints",
+			Example:  "Add interactions for error scenarios, edge cases, and different endpoints",
 		})
 	}
 
@@ -336,19 +345,19 @@ func (v *EnhancedValidator) generateSuggestions(contract *PactContract, _ *Detai
 
 	if allSuccess && len(contract.Interactions) > 1 {
 		suggestions = append(suggestions, ValidationSuggestion{
-			Type:    "coverage",
-			Message: "Consider adding error scenario interactions",
+			Type:     "coverage",
+			Message:  "Consider adding error scenario interactions",
 			Location: "interactions",
-			Example: "Add interactions for 400, 404, 500 status codes to test error handling",
+			Example:  "Add interactions for 400, 404, 500 status codes to test error handling",
 		})
 	}
 
 	// Suggest using matchers for flexible matching
 	suggestions = append(suggestions, ValidationSuggestion{
-		Type:    "improvement",
-		Message: "Consider using Pact matchers for more flexible contract matching",
+		Type:     "improvement",
+		Message:  "Consider using Pact matchers for more flexible contract matching",
 		Location: "interactions[*].response.body",
-		Example: "Use type matchers instead of exact values: {\"id\": {\"match\": \"type\"}}",
+		Example:  "Use type matchers instead of exact values: {\"id\": {\"match\": \"type\"}}",
 	})
 
 	return suggestions
@@ -363,10 +372,10 @@ func getDefaultValidationRules() []ValidationRule {
 			Validator: func(contract *PactContract) []ValidationError {
 				if strings.TrimSpace(contract.Consumer.Name) == "" {
 					return []ValidationError{{
-						Code:     "MISSING_CONSUMER",
-						Message:  "Consumer name is required",
-						Location: "consumer.name",
-						Severity: "error",
+						Code:       "MISSING_CONSUMER",
+						Message:    "Consumer name is required",
+						Location:   "consumer.name",
+						Severity:   "error",
 						Suggestion: "Specify the name of the service consuming the API",
 					}}
 				}
@@ -379,10 +388,10 @@ func getDefaultValidationRules() []ValidationRule {
 			Validator: func(contract *PactContract) []ValidationError {
 				if strings.TrimSpace(contract.Provider.Name) == "" {
 					return []ValidationError{{
-						Code:     "MISSING_PROVIDER",
-						Message:  "Provider name is required",
-						Location: "provider.name",
-						Severity: "error",
+						Code:       "MISSING_PROVIDER",
+						Message:    "Provider name is required",
+						Location:   "provider.name",
+						Severity:   "error",
 						Suggestion: "Specify the name of the service providing the API",
 					}}
 				}
@@ -395,10 +404,10 @@ func getDefaultValidationRules() []ValidationRule {
 			Validator: func(contract *PactContract) []ValidationError {
 				if len(contract.Interactions) == 0 {
 					return []ValidationError{{
-						Code:     "NO_INTERACTIONS",
-						Message:  "At least one interaction is required",
-						Location: "interactions",
-						Severity: "error",
+						Code:       "NO_INTERACTIONS",
+						Message:    "At least one interaction is required",
+						Location:   "interactions",
+						Severity:   "error",
 						Suggestion: "Add one or more interactions that define the expected API behavior",
 					}}
 				}
@@ -418,10 +427,10 @@ func getStrictValidationRules() []ValidationRule {
 				version := contract.Metadata.PactSpecification.Version
 				if !isValidSemVer(version) {
 					return []ValidationError{{
-						Code:     "INVALID_VERSION",
-						Message:  fmt.Sprintf("Pact specification version should follow semantic versioning: %s", version),
-						Location: "metadata.pactSpecification.version",
-						Severity: "warning",
+						Code:       "INVALID_VERSION",
+						Message:    fmt.Sprintf("Pact specification version should follow semantic versioning: %s", version),
+						Location:   "metadata.pactSpecification.version",
+						Severity:   "warning",
 						Suggestion: "Use a valid semantic version like '3.0.0'",
 					}}
 				}

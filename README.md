@@ -215,6 +215,24 @@ jarvis
 
 Jarvis can be configured via command-line flags, a config file, or the interactive setup wizard:
 
+### Config sources & precedence
+
+Jarvis merges configuration from multiple sources in this order (highest wins):
+
+1. Command-line flags (e.g., `--http-port 8081`)
+2. Environment variables (prefixed with `JARVIS_`, dots -> underscores)
+3. Config file (default `./config.yaml`)
+4. Built-in defaults
+
+Examples of environment variables:
+
+- `JARVIS_HTTP_PORT=8080`
+- `JARVIS_UI_PORT=9090`
+- `JARVIS_TLS_ENABLED=true`
+- `JARVIS_TLS_CERT_FILE=./certs/server.crt`
+- `JARVIS_API_VALIDATION_ENABLED=true`
+- `JARVIS_API_VALIDATION_SPEC_PATH=./specs/api.yaml`
+
 ### Configuration Options
 
 | Option | Description | Default |
@@ -264,6 +282,43 @@ language:
 output:
   directory: "./output"
   report_format: "HTML"
+
+# Local Models
+
+Jarvis supports offline AI through Ollama today and can also work alongside Docker Model Runner for running local models. Use one of the following options:
+
+## Option A: Ollama (built-in integration)
+
+Ollama is supported natively in this repo via the official Go API client. See `pkg/engine/ollama/README.md` for setup and usage. Quick steps:
+
+1) Install and start Ollama
+2) Pull a model, e.g. `ollama pull llama3.2`
+3) Jarvis generation features will use the local model automatically (configurable via env like `OLLAMA_HOST`, `OLLAMA_MODEL`).
+
+## Option B: Docker Model Runner (OpenAI-compatible API)
+
+Docker Model Runner lets you run models locally behind an OpenAI-compatible REST API. This is useful if you already use OpenAI-style clients and want to swap in local models.
+
+- Official docs: https://docs.docker.com/ai/model-runner/
+
+High-level steps (refer to the docs for the exact image/flags and supported models):
+
+1) Ensure Docker Desktop is installed and up to date
+2) Start a model runner container that exposes an OpenAI-compatible API (commonly at `http://localhost:8080/v1`)
+3) Test with a simple request:
+
+```bash
+curl -s http://localhost:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "llama3.2",
+    "messages": [{"role": "user", "content": "Write one API test idea for a blog service."}]
+  }'
+```
+
+Notes:
+- Jarvis currently integrates natively with Ollama. If you prefer Docker Model Runner, you can run it side-by-side for local experimentation or wire it into your own scripts/tools that use the OpenAI API format.
+- An OpenAI-compatible client option for Jarvis is a potential future enhancement; contributions welcome.
 ```
 
 ## Contributing

@@ -95,21 +95,9 @@ func Execute() {
 }
 
 func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Search for config in current directory
-		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
-		viper.AddConfigPath(".")
-	}
-
-	viper.SetEnvPrefix("jarvis")
-	viper.AutomaticEnv()
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
+	if err := conf.SetupViper(cfgFile); err != nil {
+		logger.Error("⚠️ Failed to initialize config: %v", err)
+	} else if viper.ConfigFileUsed() != "" {
 		logger.Info("🔧 Using config file: %s", viper.ConfigFileUsed())
 	}
 }

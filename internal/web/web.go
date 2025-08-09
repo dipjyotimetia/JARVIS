@@ -240,6 +240,7 @@ func (h *UIHandler) handleTransactionDetail(w http.ResponseWriter, r *http.Reque
 	// Extract API validation error information from headers
 	var respHeaders map[string][]string
 	if err := json.Unmarshal([]byte(t.ResponseHeaders), &respHeaders); err == nil {
+		// Header casing in Go's http.Header is canonicalized; match the exact key we set
 		if validationErrorType, ok := respHeaders["X-Api-Validation-Error"]; ok && len(validationErrorType) > 0 {
 			t.ValidationErrorType = validationErrorType[0]
 

@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -52,6 +53,69 @@ type Config struct {
 	UIPort        int                 `mapstructure:"ui_port"`
 }
 
+// SetupViper centralizes Viper configuration: config file, env, defaults.
+// Order of precedence remains: flags > env > file > defaults.
+func SetupViper(cfgFile string) error {
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+	} else {
+		viper.SetConfigName("config")
+		viper.SetConfigType("yaml")
+		viper.AddConfigPath(".")
+	}
+
+	// Environment variables: JARVIS_ prefix and support nested keys via _
+	viper.SetEnvPrefix("jarvis")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	// Sensible defaults (used if not provided by file/env/flags)
+	viper.SetDefault("http_port", 8080)
+	viper.SetDefault("ui_port", 9090)
+	viper.SetDefault("tls.port", 8443)
+	viper.SetDefault("api_validation.validate_requests", true)
+	viper.SetDefault("api_validation.validate_responses", true)
+
+	// Read config file if present
+	if err := viper.ReadInConfig(); err != nil {
+		// It's okay if there is no config file; only error on real read errors
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return err
+		}
+	}
+	return nil
+}
+
+// BindProxyFlags binds the proxy command flags to the structured config keys.
+// Keeping this centralized avoids scattered BindPFlag calls.
+func BindProxyFlags(cmd *cobra.Command) {
+	// Basic modes
+	_ = viper.BindPFlag("ui_port", cmd.Flags().Lookup("ui-port"))
+	_ = viper.BindPFlag("http_port", cmd.Flags().Lookup("http-port"))
+	_ = viper.BindPFlag("http_target_url", cmd.Flags().Lookup("target-url"))
+	_ = viper.BindPFlag("recording_mode", cmd.Flags().Lookup("record"))
+	_ = viper.BindPFlag("replay_mode", cmd.Flags().Lookup("replay"))
+
+	// TLS + mTLS
+	_ = viper.BindPFlag("tls.enabled", cmd.Flags().Lookup("tls"))
+	_ = viper.BindPFlag("tls.cert_file", cmd.Flags().Lookup("cert"))
+	_ = viper.BindPFlag("tls.key_file", cmd.Flags().Lookup("key"))
+	_ = viper.BindPFlag("tls.port", cmd.Flags().Lookup("tls-port"))
+	_ = viper.BindPFlag("tls.allow_insecure", cmd.Flags().Lookup("insecure"))
+	_ = viper.BindPFlag("tls.client_auth", cmd.Flags().Lookup("mtls"))
+	_ = viper.BindPFlag("tls.client_ca_cert", cmd.Flags().Lookup("client-ca"))
+	_ = viper.BindPFlag("tls.client_cert_file", cmd.Flags().Lookup("client-cert"))
+	_ = viper.BindPFlag("tls.client_key_file", cmd.Flags().Lookup("client-key"))
+
+	// OpenAPI validation
+	_ = viper.BindPFlag("api_validation.enabled", cmd.Flags().Lookup("api-validate"))
+	_ = viper.BindPFlag("api_validation.spec_path", cmd.Flags().Lookup("api-spec"))
+	_ = viper.BindPFlag("api_validation.validate_requests", cmd.Flags().Lookup("validate-req"))
+	_ = viper.BindPFlag("api_validation.validate_responses", cmd.Flags().Lookup("validate-resp"))
+	_ = viper.BindPFlag("api_validation.strict_mode", cmd.Flags().Lookup("strict-validation"))
+	_ = viper.BindPFlag("api_validation.continue_on_validation", cmd.Flags().Lookup("continue-on-error"))
+}
+
 // LoadConfig reads configuration from Viper
 func LoadConfig(v *viper.Viper) (*Config, error) {
 	v.SetConfigType("yaml")
@@ -79,6 +143,9 @@ func LoadConfig(v *viper.Viper) (*Config, error) {
 
 	return &config, nil
 }
+
+// Load is a convenience wrapper around LoadConfig using the global Viper instance.
+func Load() (*Config, error) { return LoadConfig(viper.GetViper()) }
 
 // ValidateConfig ensures the configuration is valid
 func validateConfig(config *Config) error {
@@ -135,7 +202,12 @@ func validateConfig(config *Config) error {
 func (c *Config) GetTargetURL(path string) string {
 	// First check if we have any matching target routes
 	for _, route := range c.TargetRoutes {
-		if strings.HasPrefix(path, route.PathPrefix) {
+		// Support simple wildcard suffixes like "/foo/*"
+		prefix := route.PathPrefix
+		if strings.HasSuffix(prefix, "/*") {
+			prefix = strings.TrimSuffix(prefix, "/*")
+		}
+		if strings.HasPrefix(path, prefix) {
 			return route.TargetURL
 		}
 	}
