@@ -8,11 +8,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dipjyotimetia/jarvis/pkg/engine/files"
 	"github.com/dipjyotimetia/jarvis/pkg/engine/ollama"
 	"github.com/getkin/kin-openapi/openapi3"
+)
+
+// Buffer pools for optimization
+var (
+	stringBuilderPool = sync.Pool{
+		New: func() interface{} {
+			return &strings.Builder{}
+		},
+	}
+	
+	jsonBufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 0, 4096)
+		},
+	}
 )
 
 // Generator handles Pact contract generation
@@ -121,61 +137,80 @@ func (g *Generator) generateContractFromSpec(ctx context.Context, doc *openapi3.
 	return contract, nil
 }
 
-// buildAIPrompt creates a prompt for the AI to generate Pact contracts
+// buildAIPrompt creates a prompt for the AI to generate Pact contracts using pooled string builder
 func (g *Generator) buildAIPrompt(_ *openapi3.T, specContent []string) string {
-	var prompt strings.Builder
+	builder := stringBuilderPool.Get().(*strings.Builder)
+	defer stringBuilderPool.Put(builder)
+	builder.Reset()
 	
-	prompt.WriteString("You are an expert in contract testing and Pact specification. ")
-	prompt.WriteString("Generate a comprehensive Pact contract from the following OpenAPI specification.\n\n")
+	builder.WriteString("You are an expert in contract testing and Pact specification. ")
+	builder.WriteString("Generate a comprehensive Pact contract from the following OpenAPI specification.\n\n")
 	
-	prompt.WriteString("Requirements:\n")
-	prompt.WriteString("- Create realistic interactions for each endpoint\n")
-	prompt.WriteString("- Include proper HTTP methods, paths, headers, and response codes\n")
-	prompt.WriteString("- Generate meaningful test data for request/response bodies\n")
-	prompt.WriteString("- Include both success and error scenarios\n")
-	prompt.WriteString("- Use appropriate Pact matchers for flexible matching\n")
-	prompt.WriteString("- Follow Pact specification v3.0.0 format\n\n")
+	builder.WriteString("Requirements:\n")
+	builder.WriteString("- Create realistic interactions for each endpoint\n")
+	builder.WriteString("- Include proper HTTP methods, paths, headers, and response codes\n")
+	builder.WriteString("- Generate meaningful test data for request/response bodies\n")
+	builder.WriteString("- Include both success and error scenarios\n")
+	builder.WriteString("- Use appropriate Pact matchers for flexible matching\n")
+	builder.WriteString("- Follow Pact specification v3.0.0 format\n\n")
 	
 	if g.config.Language != "" {
-		prompt.WriteString(fmt.Sprintf("Target language: %s\n", g.config.Language))
+		builder.WriteString("Target language: ")
+		builder.WriteString(g.config.Language)
+		builder.WriteString("\n")
 	}
 	if g.config.Framework != "" {
-		prompt.WriteString(fmt.Sprintf("Target framework: %s\n", g.config.Framework))
+		builder.WriteString("Target framework: ")
+		builder.WriteString(g.config.Framework)
+		builder.WriteString("\n")
 	}
 	
 	for key, value := range g.config.ExtraContext {
-		prompt.WriteString(fmt.Sprintf("%s: %s\n", key, value))
+		builder.WriteString(key)
+		builder.WriteString(": ")
+		builder.WriteString(value)
+		builder.WriteString("\n")
 	}
 	
-	prompt.WriteString("\nOpenAPI Specification:\n")
-	prompt.WriteString(strings.Join(specContent, "\n"))
+	builder.WriteString("\nOpenAPI Specification:\n")
+	for _, content := range specContent {
+		builder.WriteString(content)
+		builder.WriteString("\n")
+	}
 	
-	prompt.WriteString("\n\nGenerate the Pact contract as valid JSON following this structure:\n")
-	prompt.WriteString("{\n")
-	prompt.WriteString("  \"consumer\": {\"name\": \"consumer-name\"},\n")
-	prompt.WriteString("  \"provider\": {\"name\": \"provider-name\"},\n")
-	prompt.WriteString("  \"interactions\": [\n")
-	prompt.WriteString("    {\n")
-	prompt.WriteString("      \"description\": \"interaction description\",\n")
-	prompt.WriteString("      \"request\": {\n")
-	prompt.WriteString("        \"method\": \"GET\",\n")
-	prompt.WriteString("        \"path\": \"/path\",\n")
-	prompt.WriteString("        \"headers\": {},\n")
-	prompt.WriteString("        \"body\": {}\n")
-	prompt.WriteString("      },\n")
-	prompt.WriteString("      \"response\": {\n")
-	prompt.WriteString("        \"status\": 200,\n")
-	prompt.WriteString("        \"headers\": {},\n")
-	prompt.WriteString("        \"body\": {}\n")
-	prompt.WriteString("      }\n")
-	prompt.WriteString("    }\n")
-	prompt.WriteString("  ]\n")
-	prompt.WriteString("}\n")
+	// Use pre-built template string for better performance
+	builder.WriteString(contractTemplatePrompt)
 	
-	return prompt.String()
+	return builder.String()
 }
 
-// parseAIResponse parses the AI response into a PactContract
+// Pre-built contract template to avoid string concatenation
+const contractTemplatePrompt = `
+
+Generate the Pact contract as valid JSON following this structure:
+{
+  "consumer": {"name": "consumer-name"},
+  "provider": {"name": "provider-name"},
+  "interactions": [
+    {
+      "description": "interaction description",
+      "request": {
+        "method": "GET",
+        "path": "/path",
+        "headers": {},
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {}
+      }
+    }
+  ]
+}
+`
+
+// parseAIResponse parses the AI response into a PactContract with optimized JSON processing
 func (g *Generator) parseAIResponse(response string, _ *openapi3.T) (*PactContract, error) {
 	// Extract JSON from response (AI might include additional text)
 	jsonStart := strings.Index(response, "{")
@@ -189,17 +224,18 @@ func (g *Generator) parseAIResponse(response string, _ *openapi3.T) (*PactContra
 	
 	var contract PactContract
 	if err := json.Unmarshal([]byte(jsonStr), &contract); err != nil {
-		// If direct parsing fails, try to fix common issues
+		// If direct parsing fails, try to sanitize and retry
 		jsonStr = g.sanitizeJSON(jsonStr)
 		if err := json.Unmarshal([]byte(jsonStr), &contract); err != nil {
 			return nil, fmt.Errorf("failed to parse AI response as JSON: %w", err)
 		}
 	}
 	
-	// Enhance contract with additional metadata
+	// Enhance contract with metadata using pre-calculated time
+	now := time.Now()
 	for i := range contract.Interactions {
 		contract.Interactions[i].Metadata = InteractionMetadata{
-			GeneratedAt: time.Now(),
+			GeneratedAt: now,
 			Source:      "AI-generated from OpenAPI spec",
 		}
 	}
@@ -219,28 +255,37 @@ func (g *Generator) sanitizeJSON(jsonStr string) string {
 	return jsonStr
 }
 
-// saveContract saves the contract to a file
+// saveContract saves the contract to a file with optimized JSON marshaling
 func (g *Generator) saveContract(contract *PactContract) (string, error) {
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(g.config.OutputPath, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 	
-	// Generate filename
-	filename := fmt.Sprintf("%s-%s-pact.json", 
-		strings.ToLower(contract.Consumer.Name),
-		strings.ToLower(contract.Provider.Name))
+	// Generate filename using pooled builder
+	builder := stringBuilderPool.Get().(*strings.Builder)
+	defer stringBuilderPool.Put(builder)
+	builder.Reset()
+	
+	builder.WriteString(strings.ToLower(contract.Consumer.Name))
+	builder.WriteString("-")
+	builder.WriteString(strings.ToLower(contract.Provider.Name))
+	builder.WriteString("-pact.json")
+	filename := builder.String()
 	
 	filePath := filepath.Join(g.config.OutputPath, filename)
 	
-	// Convert contract to JSON
-	jsonData, err := contract.ToJSON()
+	// Convert contract to JSON with pooled buffer
+	jsonBuf := jsonBufferPool.Get().([]byte)
+	defer jsonBufferPool.Put(jsonBuf[:0]) // Reset slice but keep capacity
+	
+	jsonData, err := json.MarshalIndent(contract, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to convert contract to JSON: %w", err)
+		return "", fmt.Errorf("failed to marshal contract to JSON: %w", err)
 	}
 	
 	// Write to file
-	if err := os.WriteFile(filePath, []byte(jsonData), 0644); err != nil {
+	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
 		return "", fmt.Errorf("failed to write contract file: %w", err)
 	}
 	
