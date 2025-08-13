@@ -3,6 +3,7 @@ package ollama
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,13 +13,17 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
-// GenerateText generates content with a single response
+// GenerateText generates content with a single response and timeout handling
 func (c *client) GenerateText(ctx context.Context, prompt string) (*api.GenerateResponse, error) {
+	// Add timeout to context
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	
 	req := &api.GenerateRequest{
 		Model:   getDefaultModel(),
 		Prompt:  prompt,
 		Stream:  &[]bool{false}[0], // Disable streaming for single response
-		Options: getDefaultOptions(),
+		Options: c.getConfigurableOptionsForClient("generation"),
 	}
 
 	var response *api.GenerateResponse
@@ -28,6 +33,9 @@ func (c *client) GenerateText(ctx context.Context, prompt string) (*api.Generate
 	})
 
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("AI generation timeout after 5 minutes: %w", err)
+		}
 		return nil, err
 	}
 
@@ -39,25 +47,39 @@ func (c *client) GenerateWithOptions(ctx context.Context, req *api.GenerateReque
 	return c.apiClient.Generate(ctx, req, fn)
 }
 
-// GenerateTextStream generates content from specs with streaming response
+// GenerateTextStream generates content from specs with streaming response and timeout
 func (c *client) GenerateTextStream(ctx context.Context, specs []string, specType string) error {
+	// Add timeout to context for streaming operations
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute) // Longer timeout for streaming
+	defer cancel()
+	
 	prompt := buildPrompt(specs, fmt.Sprintf("Generate all possible positive and negative test scenarios in simple english for the provided %s spec file.", specType))
 	
 	req := &api.GenerateRequest{
 		Model:   getDefaultModel(),
 		Prompt:  prompt,
 		Stream:  &[]bool{true}[0], // Pointer to true
-		Options: getDefaultOptions(),
+		Options: c.getConfigurableOptionsForClient("generation"),
 	}
 
-	return c.apiClient.Generate(ctx, req, func(resp api.GenerateResponse) error {
+	err := c.apiClient.Generate(ctx, req, func(resp api.GenerateResponse) error {
 		fmt.Print(resp.Response)
 		return nil
 	})
+	
+	if err != nil && errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("streaming generation timeout after 10 minutes: %w", err)
+	}
+	
+	return err
 }
 
-// GenerateTextStreamWriter generates content and writes to file
+// GenerateTextStreamWriter generates content and writes to file with timeout handling
 func (c *client) GenerateTextStreamWriter(ctx context.Context, specs []string, language, specType string, outputFolder string) error {
+	// Add timeout to context
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute) // Extended timeout for file writing
+	defer cancel()
+	
 	prompt := buildPrompt(specs, fmt.Sprintf("Generate %s tests based on this %s spec.", language, specType))
 
 	ct := time.Now().Format("2006-01-02-15-04-05")
@@ -75,13 +97,19 @@ func (c *client) GenerateTextStreamWriter(ctx context.Context, specs []string, l
 		Model:   getDefaultModel(),
 		Prompt:  prompt,
 		Stream:  &[]bool{true}[0], // Pointer to true
-		Options: getDefaultOptions(),
+		Options: c.getConfigurableOptionsForClient("generation"),
 	}
 
-	return c.apiClient.Generate(ctx, req, func(resp api.GenerateResponse) error {
+	err = c.apiClient.Generate(ctx, req, func(resp api.GenerateResponse) error {
 		_, err := fmt.Fprint(writer, resp.Response)
 		return err
 	})
+	
+	if err != nil && errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("file writing generation timeout after 15 minutes: %w", err)
+	}
+	
+	return err
 }
 
 // buildPrompt combines specs with instruction text
