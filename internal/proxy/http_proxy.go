@@ -31,7 +31,26 @@ type Server interface {
 	Shutdown(ctx context.Context) error
 }
 
-// (removed custom []byte buffer pool used for request cloning to avoid unsafe aliasing)
+// Buffer pools for optimization
+var (
+	jsonBufferPool = sync.Pool{
+		New: func() interface{} {
+			return bytes.NewBuffer(make([]byte, 0, 4096))
+		},
+	}
+	
+	recordPool = sync.Pool{
+		New: func() interface{} {
+			return &db.TrafficRecord{}
+		},
+	}
+)
+
+// Configuration constants
+const (
+	maxRequestSize  = 32 * 1024 * 1024 // 32MB
+	streamThreshold = 1024 * 1024       // 1MB - stream bodies larger than this
+)
 
 // StartHTTPProxy starts the HTTP proxy server
 func StartHTTPProxy(ctx context.Context, cfg *config.Config, db *sql.DB, insertStmt *sql.Stmt) Server {
@@ -328,9 +347,12 @@ func createHTTPHandler(
 // responseRecorder wrapper captures status code, headers, and body
 type responseRecorder struct {
 	http.ResponseWriter
-	statusCode int
-	header     http.Header
-	body       *bytes.Buffer
+	statusCode    int
+	header        http.Header
+	body          *bytes.Buffer
+	streamMode    bool // Enable streaming mode for large responses
+	maxBufferSize int64 // Maximum size to buffer
+	bytesWritten  int64 // Track total bytes written
 }
 
 // Header captures headers
@@ -355,12 +377,30 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
-// Write captures body and writes to underlying writer
+// Write captures body and writes to underlying writer with streaming support
 func (r *responseRecorder) Write(b []byte) (int, error) {
-	// Write to our buffer first
+	// Track total bytes written
+	r.bytesWritten += int64(len(b))
+	
+	// If we're in stream mode or would exceed buffer size, only capture limited data
+	if r.streamMode || (r.maxBufferSize > 0 && r.body.Len() >= int(r.maxBufferSize)) {
+		// Only capture first chunk for metadata if buffer is empty
+		if r.body.Len() == 0 && len(b) > 0 {
+			// Capture first 1KB for content-type detection and basic inspection
+			chunkSize := len(b)
+			if chunkSize > 1024 {
+				chunkSize = 1024
+			}
+			r.body.Write(b[:chunkSize])
+		}
+		// Write directly to response without buffering
+		return r.ResponseWriter.Write(b)
+	}
+	
+	// Normal buffering mode - write to our buffer first
 	n, err := r.body.Write(b)
 	if err != nil {
-		return n, err // Return error from buffer write if any
+		return n, err
 	}
 	// Then write to the original ResponseWriter
 	return r.ResponseWriter.Write(b)
@@ -446,7 +486,11 @@ func saveTrafficRecord(record db.TrafficRecord, insertStmt *sql.Stmt) error {
 	// Log record details in a structured way
 	slog.Info("Record details", "method", record.Method, "url", record.URL, "status", record.ResponseStatus, "size_bytes", len(record.ResponseBody))
 
-	_, err := insertStmt.Exec(
+	// Add timeout to database operation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := insertStmt.ExecContext(ctx,
 		record.ID,
 		record.Timestamp,
 		record.Protocol,
@@ -492,6 +536,12 @@ func handleHTTPRequest(
 ) {
 	startTime := time.Now()
 
+	// Add request size limit
+	if r.ContentLength > maxRequestSize {
+		http.Error(w, "Request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	// --- Request Handling ---
 	reqHeadersBytes, _ := json.Marshal(r.Header)
 	clientIP := getClientIP(r)
@@ -502,33 +552,43 @@ func handleHTTPRequest(
 		slog.Info("Request headers", "headers", string(reqHeadersBytes))
 	}
 
-	// Clone request body if needed for recording/replay matching later
+	// Optimized request body handling with streaming support
 	var reqBodyBytes []byte
 	var reqBodyErr error
+	var isLargeBody bool
+	
 	if (cfg.RecordingMode || (apiValidator != nil && cfg.APIValidation.ValidateRequests)) && r.Body != nil && r.ContentLength != 0 {
-		body, errRead := io.ReadAll(r.Body)
-		if errRead != nil {
-			reqBodyErr = fmt.Errorf("reading request body for recording: %w", errRead)
-			slog.Warn("Error cloning request body", "method", r.Method, "url", r.URL.String(), "error", reqBodyErr)
+		// Check if body is too large for full buffering
+		if r.ContentLength > streamThreshold {
+			isLargeBody = true
+			reqBodyBytes = []byte(fmt.Sprintf("<streaming-body-size:%d>", r.ContentLength))
+			slog.Info("Large request body detected, using streaming mode", "size", r.ContentLength)
 		} else {
-			reqBodyBytes = body
-			if cfg.RecordingMode && len(reqBodyBytes) > 0 {
-				// Log the request body in a readable format
-				if len(reqBodyBytes) > 1024 {
-					slog.Info("Request body (truncated)", "body", string(reqBodyBytes[:1024]))
-				} else {
-					slog.Info("Request body", "body", string(reqBodyBytes))
+			// Buffer small bodies for validation and recording
+			body, errRead := io.ReadAll(io.LimitReader(r.Body, maxRequestSize))
+			if errRead != nil {
+				reqBodyErr = fmt.Errorf("reading request body for recording: %w", errRead)
+				slog.Warn("Error reading request body", "method", r.Method, "url", r.URL.String(), "error", reqBodyErr)
+			} else {
+				reqBodyBytes = body
+				if cfg.RecordingMode && len(reqBodyBytes) > 0 {
+					// Log the request body in a readable format
+					if len(reqBodyBytes) > 1024 {
+						slog.Info("Request body (truncated)", "body", string(reqBodyBytes[:1024]))
+					} else {
+						slog.Info("Request body", "body", string(reqBodyBytes))
+					}
 				}
+				r.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
 			}
-			r.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
 		}
 	} else if r.Body != nil {
 		defer r.Body.Close()
 	}
 
 	// --- API Validation for Request ---
-	if apiValidator != nil && cfg.APIValidation.ValidateRequests {
-		// Create a copy of the request to avoid modifying the original
+	if apiValidator != nil && cfg.APIValidation.ValidateRequests && !isLargeBody {
+		// Skip validation for large bodies to avoid memory issues
 		reqCopy := r.Clone(r.Context())
 		if len(reqBodyBytes) > 0 {
 			reqCopy.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
@@ -548,6 +608,8 @@ func handleHTTPRequest(
 		} else {
 			slog.Info("Request passed OpenAPI validation", "method", r.Method, "path", r.URL.Path)
 		}
+	} else if apiValidator != nil && isLargeBody {
+		slog.Info("Skipping request validation for large body", "size", r.ContentLength)
 	}
 
 	// --- Replay Mode ---
@@ -559,9 +621,11 @@ func handleHTTPRequest(
 	// --- Recording or Passthrough Mode ---
 	var recorder *responseRecorder
 	writer := w
+	var needsRecording = cfg.RecordingMode
+	var needsValidation = apiValidator != nil && cfg.APIValidation.ValidateResponses
 
-	// Always use recorder if we need to validate the response
-	if cfg.RecordingMode || (apiValidator != nil && cfg.APIValidation.ValidateResponses) {
+	// Always use recorder if we need to validate the response or record non-large responses
+	if needsRecording || needsValidation {
 		responseBuf := responseBufPool.Get().(*bytes.Buffer)
 		responseBuf.Reset()
 		defer responseBufPool.Put(responseBuf)
@@ -571,6 +635,8 @@ func handleHTTPRequest(
 			statusCode:     http.StatusOK,
 			body:           responseBuf,
 			header:         http.Header{},
+			streamMode:     isLargeBody, // Enable streaming for large responses
+			maxBufferSize:  streamThreshold,
 		}
 		writer = recorder
 
@@ -585,8 +651,8 @@ func handleHTTPRequest(
 	proxy.ServeHTTP(writer, r)
 
 	// --- API Validation for Response ---
-	if apiValidator != nil && cfg.APIValidation.ValidateResponses && recorder != nil {
-		// Validate response
+	if apiValidator != nil && cfg.APIValidation.ValidateResponses && recorder != nil && !recorder.streamMode {
+		// Only validate non-streaming responses
 		respBody := recorder.body.Bytes()
 		err := apiValidator.ValidateResponse(r, recorder.statusCode, recorder.header, respBody)
 		if err != nil {
@@ -606,6 +672,8 @@ func handleHTTPRequest(
 		} else {
 			slog.Info("Response passed OpenAPI validation", "method", r.Method, "path", r.URL.Path)
 		}
+	} else if apiValidator != nil && recorder != nil && recorder.streamMode {
+		slog.Info("Skipping response validation for streaming response")
 	}
 
 	// --- Recording (after response) ---
@@ -613,31 +681,52 @@ func handleHTTPRequest(
 		// Calculate duration
 		duration := time.Since(startTime).Milliseconds()
 
-		// Capture response details
-		respHeadersBytes, _ := json.Marshal(recorder.Header())
-		respBodyBytes := recorder.body.Bytes()
+		// Capture response details efficiently
+		buf := jsonBufferPool.Get().(*bytes.Buffer)
+		defer jsonBufferPool.Put(buf)
+		buf.Reset()
+		
+		// Marshal headers using pooled buffer
+		encoder := json.NewEncoder(buf)
+		encoder.Encode(recorder.Header())
+		respHeadersBytes := make([]byte, buf.Len())
+		copy(respHeadersBytes, buf.Bytes())
+
+		// Handle response body based on streaming mode
+		var respBodyBytes []byte
+		if recorder.streamMode && recorder.body.Len() > streamThreshold {
+			// For large streaming responses, store metadata instead of full body
+			respBodyBytes = []byte(fmt.Sprintf("<streaming-response-size:%d>", recorder.body.Len()))
+			slog.Info("Large response body detected, storing metadata only", "size", recorder.body.Len())
+		} else {
+			respBodyBytes = recorder.body.Bytes()
+		}
 
 		// Enhanced logging for response
-		slog.Info("Received response", "status", recorder.statusCode, "duration_ms", duration)
+		slog.Info("Received response", "status", recorder.statusCode, "duration_ms", duration, "body_size", len(respBodyBytes))
 		slog.Info("Response headers", "headers", string(respHeadersBytes))
 
 		// Log response body in a readable format (truncate if too large)
-		if len(respBodyBytes) > 0 {
+		if len(respBodyBytes) > 0 && !recorder.streamMode {
 			if len(respBodyBytes) > 1024 {
 				slog.Info("Response body (truncated)", "body", string(respBodyBytes[:1024]))
 			} else {
 				slog.Info("Response body", "body", string(respBodyBytes))
 			}
 		} else {
-			slog.Info("Response body: <empty>")
+			slog.Info("Response body: <empty or streaming>")
 		}
 
-		// Save the record asynchronously
+		// Save the record asynchronously using pooled record
 		go func() {
 			recordID := generateID()
 			slog.Info("Saving traffic record", "record_id", recordID)
 
-			record := db.TrafficRecord{
+			record := recordPool.Get().(*db.TrafficRecord)
+			defer recordPool.Put(record)
+			
+			// Reset and populate record
+			*record = db.TrafficRecord{
 				ID:              recordID,
 				Timestamp:       time.Now().UTC(),
 				Protocol:        "HTTP",
@@ -654,7 +743,7 @@ func handleHTTPRequest(
 				TestID:          r.Header.Get("X-Test-ID"),
 			}
 
-			if err := saveTrafficRecord(record, insertStmt); err != nil {
+			if err := saveTrafficRecord(*record, insertStmt); err != nil {
 				slog.Warn("Error saving recorded HTTP traffic", "error", err)
 			} else {
 				slog.Info("Successfully saved record to database", "record_id", recordID)

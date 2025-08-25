@@ -177,9 +177,11 @@
             border-color: var(--gray);
         }
 
-        /* Table */
+        /* Table with virtual scrolling support */
         .table-responsive {
             overflow-x: auto;
+            max-height: 70vh; /* Enable vertical scrolling */
+            position: relative;
         }
 
         table {
@@ -187,6 +189,16 @@
             border-collapse: separate;
             border-spacing: 0;
             margin-bottom: 0;
+        }
+        
+        /* Virtual scrolling spacers */
+        .virtual-spacer {
+            pointer-events: none;
+        }
+        
+        .virtual-spacer td {
+            border: none !important;
+            padding: 0 !important;
         }
 
         th,
@@ -207,15 +219,25 @@
 
         tr {
             transition: background 0.2s ease;
+            min-height: 60px; /* Fixed height for virtual scrolling */
         }
 
-        tr:hover {
+        tr:hover:not(.virtual-spacer) {
             background: rgba(33, 150, 243, 0.04);
             cursor: pointer;
         }
 
-        tr:active {
+        tr:active:not(.virtual-spacer) {
             background: rgba(33, 150, 243, 0.08);
+        }
+        
+        /* Ensure consistent row heights for virtual scrolling */
+        tbody tr {
+            height: 60px;
+        }
+        
+        tbody td {
+            vertical-align: middle;
         }
 
         /* Status badges */
@@ -1038,6 +1060,21 @@
         let currentPage = 1;
         let pageSize = 50;
         let totalTransactions = 0;
+        let currentTransactionData = []; // Store current data for virtual scrolling
+
+        // Virtual scrolling configuration
+        const VIRTUAL_SCROLL_CONFIG = {
+            itemHeight: 60, // Height of each row in pixels
+            visibleBuffer: 10, // Extra items to render outside viewport
+            maxRenderedItems: 100 // Maximum items to keep in DOM
+        };
+
+        let virtualScrollData = {
+            totalItems: 0,
+            visibleStart: 0,
+            visibleEnd: 0,
+            scrollTop: 0
+        };
 
         // DOM Elements
         const transactionsTable = document.getElementById('transactions-body');
@@ -1129,6 +1166,20 @@
             loadTransactions();
         });
 
+        // Setup virtual scrolling event handlers
+        function setupVirtualScrolling() {
+            const tableContainer = document.querySelector('.table-responsive');
+            if (tableContainer) {
+                tableContainer.addEventListener('scroll', debounce(() => {
+                    virtualScrollData.scrollTop = tableContainer.scrollTop;
+                    if (currentTransactionData.length > VIRTUAL_SCROLL_CONFIG.maxRenderedItems) {
+                        renderVirtualizedTransactions(currentTransactionData);
+                        makeRowsNavigable();
+                    }
+                }, 16)); // ~60fps
+            }
+        }
+
         // Keyboard navigation for detail view
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && detailView.classList.contains('active')) {
@@ -1136,6 +1187,9 @@
                 detailView.setAttribute('aria-hidden', 'true');
             }
         });
+
+        // Initialize virtual scrolling on page load
+        document.addEventListener('DOMContentLoaded', setupVirtualScrolling);
 
         // Use event delegation for tabs
         document.querySelectorAll('.tab-container').forEach(container => {
@@ -1169,7 +1223,7 @@
             });
         });
 
-        // Load transactions from API
+        // Load transactions from API with virtual scrolling support
         function loadTransactions() {
             showingInfo.innerHTML = '<span class="loading-spinner"></span> Loading transactions...';
             
@@ -1181,8 +1235,10 @@
             }
 
             const url = new URL('/api/transactions', window.location.origin);
+            // Increase page size for virtual scrolling
+            const virtualPageSize = Math.max(pageSize, 200);
             url.searchParams.append('page', currentPage);
-            url.searchParams.append('pageSize', pageSize);
+            url.searchParams.append('pageSize', virtualPageSize);
 
             // Add filters if provided
             if (urlFilter.value) url.searchParams.append('url', urlFilter.value);
@@ -1192,8 +1248,9 @@
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
-                    renderTransactions(data.transactions);
+                    currentTransactionData = data.transactions || [];
                     totalTransactions = data.total;
+                    renderVirtualizedTransactions(currentTransactionData);
                     updatePagination(data);
                     makeRowsNavigable();
                 })
@@ -1204,18 +1261,83 @@
                 });
         }
 
-        // Render transactions to table
+        // Render transactions with virtual scrolling optimization
+        function renderVirtualizedTransactions(transactions) {
+            if (!transactions || transactions.length === 0) {
+                transactionsTable.innerHTML = '<tr><td colspan="6" style="text-align: center">No transactions found</td></tr>';
+                return;
+            }
+
+            const containerHeight = transactionsTable.parentElement.clientHeight || 400;
+            const visibleItemCount = Math.ceil(containerHeight / VIRTUAL_SCROLL_CONFIG.itemHeight);
+            
+            virtualScrollData.totalItems = transactions.length;
+            virtualScrollData.visibleStart = Math.max(0, Math.floor(virtualScrollData.scrollTop / VIRTUAL_SCROLL_CONFIG.itemHeight) - VIRTUAL_SCROLL_CONFIG.visibleBuffer);
+            virtualScrollData.visibleEnd = Math.min(transactions.length, virtualScrollData.visibleStart + visibleItemCount + VIRTUAL_SCROLL_CONFIG.visibleBuffer * 2);
+
+            // Clear existing rows
+            transactionsTable.innerHTML = '';
+            
+            // Add spacer for items before visible range
+            if (virtualScrollData.visibleStart > 0) {
+                const spacer = document.createElement('tr');
+                spacer.style.height = (virtualScrollData.visibleStart * VIRTUAL_SCROLL_CONFIG.itemHeight) + 'px';
+                spacer.innerHTML = '<td colspan="6"></td>';
+                spacer.className = 'virtual-spacer';
+                transactionsTable.appendChild(spacer);
+            }
+
+            // Render visible items
+            for (let i = virtualScrollData.visibleStart; i < virtualScrollData.visibleEnd; i++) {
+                const t = transactions[i];
+                if (!t) continue;
+                
+                const row = document.createElement('tr');
+                row.className = 'fade-in';
+                row.setAttribute('tabindex', '0');
+                row.setAttribute('aria-label', `Transaction ${t.method} ${truncateText(t.url, 30)}`);
+                row.style.height = VIRTUAL_SCROLL_CONFIG.itemHeight + 'px';
+                row.innerHTML = `
+                    <td data-label="Time">${formatDate(t.timestamp)}</td>
+                    <td data-label="Method"><span class="method-badge method-${t.method}">${t.method}</span></td>
+                    <td data-label="URL">${truncateText(t.url, 60)}</td>
+                    <td data-label="Status"><span class="status status-${Math.floor(t.status / 100)}xx">${t.status}</span></td>
+                    <td data-label="Duration">${t.duration_ms} ms</td>
+                    <td data-label="Content Type">${truncateText(t.content_type || '-', 30)}</td>
+                `;
+                row.addEventListener('click', () => loadTransactionDetail(t.id));
+                transactionsTable.appendChild(row);
+            }
+
+            // Add spacer for items after visible range
+            const remainingItems = virtualScrollData.totalItems - virtualScrollData.visibleEnd;
+            if (remainingItems > 0) {
+                const spacer = document.createElement('tr');
+                spacer.style.height = (remainingItems * VIRTUAL_SCROLL_CONFIG.itemHeight) + 'px';
+                spacer.innerHTML = '<td colspan="6"></td>';
+                spacer.className = 'virtual-spacer';
+                transactionsTable.appendChild(spacer);
+            }
+        }
+
+        // Fallback to regular rendering for smaller datasets
         function renderTransactions(transactions) {
             if (!transactions || transactions.length === 0) {
                 transactionsTable.innerHTML = '<tr><td colspan="6" style="text-align: center">No transactions found</td></tr>';
                 return;
             }
 
+            // Use virtual scrolling for large datasets
+            if (transactions.length > VIRTUAL_SCROLL_CONFIG.maxRenderedItems) {
+                return renderVirtualizedTransactions(transactions);
+            }
+
+            // Regular rendering for small datasets
             transactionsTable.innerHTML = '';
             transactions.forEach(t => {
                 const row = document.createElement('tr');
                 row.className = 'fade-in';
-                row.setAttribute('tabindex', '0');  // Make focusable for keyboard navigation
+                row.setAttribute('tabindex', '0');
                 row.setAttribute('aria-label', `Transaction ${t.method} ${truncateText(t.url, 30)}`);
                 row.innerHTML = `
                     <td data-label="Time">${formatDate(t.timestamp)}</td>
@@ -1346,27 +1468,46 @@
                 `<i class="fas fa-info-circle" aria-hidden="true"></i> ${transaction.method} ${truncateText(transaction.url, 30)}`;
         }
 
-        // Helper function to format body based on content type
+        // Optimized body formatting with better error handling
         function formatBody(body, contentType) {
+            if (!body) return '';
+            
             let decodedBody;
             try {
-                // Convert byte array to string
-                if (typeof body === 'object' && body !== null) {
-                    decodedBody = atob(body);
+                // Handle different body types more efficiently
+                if (typeof body === 'string') {
+                    // Check if it's base64 encoded
+                    if (body.match(/^[A-Za-z0-9+/]*={0,2}$/)) {
+                        try {
+                            decodedBody = atob(body);
+                        } catch {
+                            decodedBody = body; // Not base64, use as-is
+                        }
+                    } else {
+                        decodedBody = body;
+                    }
+                } else if (Array.isArray(body)) {
+                    // Convert byte array to string
+                    decodedBody = String.fromCharCode.apply(null, body);
                 } else {
-                    decodedBody = body;
+                    decodedBody = String(body);
                 }
 
                 // Try to pretty-print JSON
-                if (contentType && contentType.includes('application/json')) {
-                    const jsonObj = JSON.parse(decodedBody);
-                    return JSON.stringify(jsonObj, null, 2);
+                if (contentType && contentType.includes('application/json') && decodedBody.trim()) {
+                    try {
+                        const jsonObj = JSON.parse(decodedBody);
+                        return JSON.stringify(jsonObj, null, 2);
+                    } catch {
+                        // Not valid JSON, return as-is
+                        return decodedBody;
+                    }
                 }
 
                 return decodedBody;
             } catch (e) {
-                console.log('Error formatting body:', e);
-                return body;
+                console.warn('Error formatting body:', e);
+                return String(body); // Fallback to string conversion
             }
         }
 
