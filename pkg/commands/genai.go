@@ -1,14 +1,17 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/dipjyotimetia/jarvis/pkg/engine/files"
-	"github.com/dipjyotimetia/jarvis/pkg/engine/ollama"
+	"github.com/dipjyotimetia/jarvis/pkg/engine/llm"
 	"github.com/dipjyotimetia/jarvis/pkg/engine/prompt"
 	"github.com/spf13/cobra"
 )
@@ -66,14 +69,34 @@ func GenerateTestModule() *cobra.Command {
 
 			s.Start()
 			ctx := context.Background()
-			ai, err := ollama.New(ctx)
+			llmClient, err := llm.NewFromEnv(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create Ollama engine: %w", err)
+				return fmt.Errorf("failed to create LLM client: %w", err)
 			}
 
-			err = ai.GenerateTextStreamWriter(ctx, reader, language, spec, outputPath)
+			// Generate tests
+			prompt := buildPrompt(reader, fmt.Sprintf("Generate %s tests based on this %s spec.", language, spec))
+
+			ct := time.Now().Format("2006-01-02-15-04-05")
+			files.CheckDirectryExists(outputPath)
+			outputFile, err := os.Create(fmt.Sprintf("%s/%s_output_test.md", outputPath, ct))
+			if err != nil {
+				s.Stop()
+				return err
+			}
+			defer outputFile.Close()
+
+			writer := bufio.NewWriter(outputFile)
+			defer writer.Flush()
+
+			err = llmClient.GenerateStream(ctx, prompt, func(chunk string) error {
+				_, err := fmt.Fprint(writer, chunk)
+				return err
+			})
+
 			if err != nil {
 				s.FinalMSG = "Test generation failed: %v\n"
+				s.Stop()
 				return err
 			}
 			s.Stop()
@@ -102,9 +125,9 @@ func GenerateTestScenarios() *cobra.Command {
 			spec := prompt.SelectLanguage(specContent)
 
 			ctx := context.Background()
-			ai, err := ollama.New(ctx)
+			llmClient, err := llm.NewFromEnv(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create Ollama engine: %w", err)
+				return fmt.Errorf("failed to create LLM client: %w", err)
 			}
 
 			file, err := files.ListFiles(specPath)
@@ -120,7 +143,14 @@ func GenerateTestScenarios() *cobra.Command {
 				return fmt.Errorf("failed to read spec file: %w", err)
 			}
 
-			err = ai.GenerateTextStream(ctx, reader, spec)
+			// Generate scenarios
+			promptText := buildPrompt(reader, fmt.Sprintf("Generate all possible positive and negative test scenarios in simple english for the provided %s spec file.", spec))
+
+			err = llmClient.GenerateStream(ctx, promptText, func(chunk string) error {
+				fmt.Print(chunk)
+				return nil
+			})
+
 			if err != nil {
 				return err
 			}
@@ -129,4 +159,19 @@ func GenerateTestScenarios() *cobra.Command {
 	}
 	setGenerateScenariosFlag(cmd)
 	return cmd
+}
+
+// buildPrompt combines specs with instruction text
+func buildPrompt(specs []string, instruction string) string {
+	var builder strings.Builder
+
+	for _, spec := range specs {
+		builder.WriteString(spec)
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString("\n")
+	builder.WriteString(instruction)
+
+	return builder.String()
 }

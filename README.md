@@ -8,17 +8,29 @@ An AI-powered CLI tool for intelligent API testing and traffic inspection
 
 ## Overview
 
-Jarvis is a comprehensive CLI tool that leverages Ollama AI models to revolutionize API testing workflows. It combines intelligent test generation capabilities with HTTP/HTTPS traffic inspection, certificate management, and interactive setup wizards to streamline development and testing processes.
+Jarvis is a comprehensive CLI tool that leverages **multiple AI providers** (OpenAI, Anthropic, Google, Ollama) to revolutionize API testing workflows. It combines intelligent test generation capabilities with HTTP/HTTPS traffic inspection, certificate management, and interactive setup wizards to streamline development and testing processes.
+
+## 🆕 What's New
+
+- **🚀 Multi-LLM Support**: Choose between OpenAI, Anthropic Claude, Google Gemini, or Ollama
+- **🧪 AI Test Data Generator**: Generate realistic test data from OpenAPI specifications
+- **🔍 AI Failure Analyzer**: Intelligent diagnosis of API failures with root cause analysis
+- **💰 Cost Optimization**: Use free local models (Ollama) or premium cloud models as needed
+- **🔄 Provider Flexibility**: Switch between AI providers without code changes
 
 ## Features
 
 ### 🤖 AI-Powered Test Generation
-- **API Spec Analysis**: Generate comprehensive test scenarios from OpenAPI and Protobuf specifications
+
+- **Multiple AI Providers**: OpenAI GPT-4, Anthropic Claude, Google Gemini, or local Ollama models
+- **Test Data Generation**: Generate realistic test data from OpenAPI schemas
+- **Test Scenarios**: Generate comprehensive test scenarios from API specifications
+- **Failure Analysis**: AI-powered diagnosis of API failures with actionable insights
 - **Contract Testing**: Generate Pact contracts for consumer-driven contract testing
-- **Ollama Integration**: Leverage local AI models for intelligent test case creation
-- **File Processing**: Process specification files to identify edge cases and testing requirements
+- **Smart Analysis**: Identify edge cases, boundary conditions, and validation requirements
 
 ### 🔍 Advanced Traffic Inspector
+
 - **HTTP/HTTPS Proxy**: Record, replay, and analyze API traffic with TLS and mTLS support
 - **Multiple Modes**: Record mode, replay mode, and passthrough mode
 - **Path-Based Routing**: Route different API paths to different target servers
@@ -27,12 +39,14 @@ Jarvis is a comprehensive CLI tool that leverages Ollama AI models to revolution
 - **Certificate Management**: Built-in self-signed certificate generation
 
 ### 🔧 Developer Tools
+
 - **Interactive Setup Wizard**: Step-by-step configuration with language and framework preferences
 - **Spec Analysis**: Deep analysis of Protobuf and OpenAPI specifications
 - **gRPC Tools**: Generate gRPC curl commands for service testing
 - **Multi-Language Support**: JavaScript, TypeScript, Python, Java, Go, and more
 
 ### 🔄 Integration & Automation
+
 - **Jira & Confluence**: Connect to your existing documentation and issue tracking
 - **GitHub**: Stay updated with automatic version checks
 - **Customizable Output**: Generate output in formats that suit your workflow
@@ -53,109 +67,134 @@ sudo mv jarvis /usr/local/bin/
 
 ## Quick Start
 
+### AI Provider Setup
+
+Choose one or more AI providers:
+
+```bash
+# Option 1: Ollama (FREE, Local, Private)
+ollama pull llama3.2
+
+# Option 2: OpenAI (Cloud, High Quality)
+export OPENAI_API_KEY="sk-..."
+
+# Option 3: Anthropic Claude (Cloud, Best Reasoning)
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Option 4: Google Gemini (Cloud, Cost-Effective)
+export GOOGLE_API_KEY="AIza..."
+```
+
+See [Quick Start Guide](docs/QUICK_START_LLM.md) for detailed setup.
+
+### Core Features
+
 ```bash
 # Interactive setup wizard
 jarvis setup
 
-# Check version and updates
-jarvis version
+# Generate realistic test data from OpenAPI spec
+jarvis gen generate-testdata --spec api.yaml --count 10
 
-# Start the traffic inspector proxy (HTTP + Web UI)
-jarvis proxy
+# Analyze API failures with AI
+jarvis analyze analyze-failures --limit 5
 
-# Start HTTPS proxy with TLS
-jarvis proxy --tls --cert ./certs/server.crt --key ./certs/server.key --tls-port=8443
+# Generate test scenarios from OpenAPI spec
+jarvis gen generate-scenarios --path="specs/openapi/api.yaml"
+
+# Start traffic inspector proxy
+jarvis proxy --record
 
 # Generate self-signed certificates
 jarvis certificate --cert-dir ./certs
-
-# Generate test scenarios from OpenAPI spec  
-jarvis gen generate-scenarios --path="specs/openapi/v3.0/my_api.yaml"
-
-# Generate test cases from Protobuf spec
-jarvis gen generate-test --path="specs/proto" --output="output"
-
-# Generate Pact contracts from OpenAPI spec
-jarvis gen generate-contracts --path="specs/openapi/v3.0/my_api.yaml" --consumer="web-app" --provider="api-service"
-
-# Generate Pact contracts with test code
-jarvis gen generate-contracts --path="specs/openapi" --consumer="mobile-app" --provider="backend-api" --language="javascript" --framework="jest" --examples
-
-# Analyze API specifications
-jarvis analyze spec-analyzer --path="specs/proto"
-
-# Generate gRPC curl commands
-jarvis tools grpc-curl --proto="user.proto" --service="UserService" --method="GetUser"
 ```
 
-## Pact Contract Generation
+## AI-Powered Features
 
-Jarvis can generate Pact contracts from OpenAPI specifications using AI, helping you implement consumer-driven contract testing.
+### 1. Test Data Generation
 
-### Features
-- **AI-Generated Contracts**: Creates realistic Pact contracts from OpenAPI specs
-- **Multi-Language Support**: Generates test code for JavaScript, Python, Java, Go
-- **Framework Integration**: Supports Jest, Pytest, JUnit, Go testing
-- **Smart Validation**: Comprehensive validation with helpful suggestions
-- **Template System**: Pre-built templates for common languages and frameworks
-
-### Usage Examples
+Generate realistic, schema-compliant test data:
 
 ```bash
-# Basic contract generation
-jarvis gen generate-contracts \
-  --path="api-spec.yaml" \
-  --consumer="web-frontend" \
-  --provider="user-service"
+# Basic usage
+jarvis gen generate-testdata --spec api.yaml
 
-# Generate with test code
-jarvis gen generate-contracts \
-  --path="api-spec.yaml" \
-  --consumer="mobile-app" \
-  --provider="backend-api" \
-  --language="javascript" \
-  --framework="jest" \
-  --examples
+# Advanced options
+jarvis gen generate-testdata \
+  --spec api.yaml \
+  --count 10 \
+  --locale en-GB \
+  --output ./testdata
 
-# Custom output directory
-jarvis gen generate-contracts \
-  --path="specs/openapi/" \
-  --consumer="client" \
-  --provider="server" \
-  --output="./pact-contracts"
+# Generate from JSON schema
+jarvis gen generate-from-schema --schema user.schema.json
 ```
 
-### Supported Languages & Frameworks
-- **JavaScript**: Jest, Mocha
-- **Python**: Pytest, unittest
-- **Java**: JUnit, TestNG
-- **Go**: testing package
-- **TypeScript**: Jest, Mocha
+**Features:**
+- ✅ Valid and invalid test cases
+- ✅ Boundary value testing
+- ✅ Schema-aware generation
+- ✅ Multiple locales support
+- ✅ Edge case identification
 
-### Generated Files
-- `{consumer}-{provider}-pact.json`: Pact contract file
-- `{consumer}_{provider}_test.{ext}`: Test code (when `--examples` is used)
+### 2. Failure Analysis
+
+AI-powered diagnosis of API failures:
+
+```bash
+# Analyze recent failures
+jarvis analyze analyze-failures
+
+# Analyze specific endpoint
+jarvis analyze analyze-endpoint /api/users
+
+# Filter by status code
+jarvis analyze analyze-failures --status 500
+
+# Save detailed report
+jarvis analyze analyze-failures --output report.json
+```
+
+**Analysis Includes:**
+- 🎯 Root cause identification
+- 📊 Error categorization
+- 💡 Actionable fix suggestions
+- 🔄 Reproduction steps
+- 🛡️ Prevention tips
+- 📚 Related documentation
+
+### 3. Test Scenarios
+
+Generate comprehensive test scenarios:
+
+```bash
+# Generate scenarios from spec
+jarvis gen generate-scenarios --path specs/api.yaml
+
+# Generate test cases with code
+jarvis gen generate-test --path specs/ --output tests/
+```
 
 ## Traffic Inspector Proxy
 
-The proxy component provides powerful HTTP/HTTPS traffic inspection capabilities:
+### Basic Usage
 
-### Basic Proxy Usage
 ```bash
-# Start basic HTTP proxy on port 8080
+# Start HTTP proxy on port 8080
 jarvis proxy
-
-# Start with custom ports
-jarvis proxy --ui-port=9999
 
 # Recording mode - capture all traffic
 jarvis proxy --record
 
 # Replay mode - replay captured traffic
 jarvis proxy --replay
+
+# Start with custom ports
+jarvis proxy --ui-port=9999
 ```
 
 ### HTTPS/TLS Support
+
 ```bash
 # Generate self-signed certificates
 jarvis certificate --cert-dir ./certs
@@ -164,167 +203,231 @@ jarvis certificate --cert-dir ./certs
 jarvis proxy --tls --cert ./certs/server.crt --key ./certs/server.key --tls-port=8443
 
 # Enable mutual TLS (mTLS)
-jarvis proxy --mtls --client-ca ./certs/ca.crt --client-cert ./certs/client.crt --client-key ./certs/client.key
+jarvis proxy --mtls --client-ca ./certs/ca.crt
 ```
 
 ### OpenAPI Validation
+
 ```bash
-# Enable API validation against OpenAPI spec
+# Enable API validation
 jarvis proxy --api-validate --api-spec ./specs/api.yaml
 
 # Strict validation mode
 jarvis proxy --api-validate --api-spec ./specs/api.yaml --strict-validation
-
-# Validate requests only
-jarvis proxy --api-validate --api-spec ./specs/api.yaml --validate-req --validate-resp=false
 ```
 
 ### Web UI
-- Access the web interface at `http://localhost:9090/ui/` (default)
+
+- Access at `http://localhost:9090/ui/`
 - View captured requests and responses
-- Analyze traffic patterns and API behavior
-- Export data for further analysis
+- Analyze traffic patterns
+- Export data for analysis
 
 ## Command Structure
 
-Jarvis uses a structured command hierarchy:
-
 ```
 jarvis
-├── setup                    # Interactive setup wizard
-├── version                  # Version information and updates
-├── certificate             # Certificate generation
-├── proxy                   # Traffic inspector proxy
-├── gen                     # Generation commands
-│   ├── generate-test       # Generate test cases
-│   ├── generate-scenarios  # Generate test scenarios  
-│   └── generate-contracts  # Generate Pact contracts
-├── analyze                 # Analysis commands
-│   └── spec-analyzer       # Analyze API specifications
-└── tools                   # Utility tools
-    └── grpc-curl           # Generate gRPC curl commands
+├── setup                        # Interactive setup wizard
+├── version                      # Version information
+├── certificate                  # Certificate generation
+├── proxy                        # Traffic inspector proxy
+├── gen                          # Generation commands
+│   ├── generate-test            # Generate test cases
+│   ├── generate-scenarios       # Generate test scenarios
+│   ├── generate-testdata        # Generate test data (NEW)
+│   └── generate-from-schema     # Generate from JSON schema (NEW)
+├── analyze                      # Analysis commands
+│   ├── spec-analyzer            # Analyze API specifications
+│   ├── analyze-failures         # AI failure analysis (NEW)
+│   └── analyze-endpoint         # Endpoint failure analysis (NEW)
+└── tools                        # Utility tools
+    └── grpc-curl                # Generate gRPC curl commands
 ```
-
-## Documentation
-
-- [Design Document](docs/design.md) - Architecture and design decisions
-- [Setup Guide](docs/setup.md) - Detailed setup and configuration
-- [Example Usage](docs/example.md) - Comprehensive usage examples
 
 ## Configuration
 
-Jarvis can be configured via command-line flags, a config file, or the interactive setup wizard:
+### AI Provider Configuration
 
-### Config sources & precedence
+```bash
+# Auto-detect provider (priority: OpenAI → Anthropic → Google → Ollama)
+# Just set an API key
 
-Jarvis merges configuration from multiple sources in this order (highest wins):
+# Or explicitly set provider
+export LLM_PROVIDER=openai|anthropic|google|ollama
+export LLM_MODEL=gpt-4o-mini
+export LLM_TEMPERATURE=0.7
+export LLM_MAX_TOKENS=2048
+```
 
-1. Command-line flags (e.g., `--http-port 8081`)
-2. Environment variables (prefixed with `JARVIS_`, dots -> underscores)
-3. Config file (default `./config.yaml`)
-4. Built-in defaults
+### Proxy Configuration
 
-Examples of environment variables:
+Jarvis can be configured via command-line flags, config file, or environment variables:
 
-- `JARVIS_HTTP_PORT=8080`
-- `JARVIS_UI_PORT=9090`
-- `JARVIS_TLS_ENABLED=true`
-- `JARVIS_TLS_CERT_FILE=./certs/server.crt`
-- `JARVIS_API_VALIDATION_ENABLED=true`
-- `JARVIS_API_VALIDATION_SPEC_PATH=./specs/api.yaml`
+**Priority:** Command-line flags > Environment variables > Config file > Defaults
 
-### Configuration Options
+```bash
+# Environment variables
+export JARVIS_HTTP_PORT=8080
+export JARVIS_UI_PORT=9090
+export JARVIS_TLS_ENABLED=true
+```
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `http_port` | Port for the HTTP proxy server | 8080 |
-| `ui_port` | Port for the web UI | 9090 |
-| `http_target_url` | Default target URL for proxying | (required) |
-| `target_routes` | Array of path-based routing rules | [] |
-| `sqlite_db_path` | Path to SQLite database file | traffic_inspector.db |
-| `recording_mode` | Enable traffic recording | false |
-| `replay_mode` | Enable traffic replay | false |
-| `tls.enabled` | Enable HTTPS support | false |
-| `tls.port` | HTTPS port | 8443 |
-| `tls.cert_file` | TLS certificate file path | "" |
-| `tls.key_file` | TLS private key file path | "" |
-| `api_validation.enabled` | Enable OpenAPI validation | false |
-| `api_validation.spec_path` | OpenAPI specification file path | "" |
-
-### Configuration File Example
+**Config file example:**
 
 ```yaml
 # config.yaml
 http_port: 8080
 ui_port: 9090
-sqlite_db_path: "./data/traffic_inspector.db"
 recording_mode: false
-replay_mode: false
 
 tls:
   enabled: true
   port: 8443
   cert_file: "./certs/server.crt"
   key_file: "./certs/server.key"
-  client_auth: false
 
 api_validation:
   enabled: true
   spec_path: "./specs/api.yaml"
-  validate_requests: true
-  validate_responses: true
-  strict_mode: false
+```
 
-language:
-  preferred: "javascript"
-  framework: "jest"
+## Documentation
 
-output:
-  directory: "./output"
-  report_format: "HTML"
+### Getting Started
+- [Quick Start Guide](docs/QUICK_START_LLM.md) - Get started in 5 minutes
+- [Setup Guide](docs/setup.md) - Detailed setup and configuration
+- [Example Usage](docs/example.md) - Comprehensive usage examples
 
-# Local Models
+### AI Features
+- [LLM Integration Guide](docs/LLM_INTEGRATION.md) - Multi-provider setup and configuration
+- [New Features Guide](docs/NEW_FEATURES.md) - Test data generation and failure analysis
+- [Migration Summary](docs/MIGRATION_SUMMARY.md) - Migrating from Ollama-only
 
-Jarvis supports offline AI through Ollama today and can also work alongside Docker Model Runner for running local models. Use one of the following options:
+### Advanced
+- [Design Document](docs/design.md) - Architecture and design decisions
+- [Implementation Summary](IMPLEMENTATION_SUMMARY.md) - Technical implementation details
 
-## Option A: Ollama (built-in integration)
+## Use Cases
 
-Ollama is supported natively in this repo via the official Go API client. See `pkg/engine/ollama/README.md` for setup and usage. Quick steps:
-
-1) Install and start Ollama
-2) Pull a model, e.g. `ollama pull llama3.2`
-3) Jarvis generation features will use the local model automatically (configurable via env like `OLLAMA_HOST`, `OLLAMA_MODEL`).
-
-## Option B: Docker Model Runner (OpenAI-compatible API)
-
-Docker Model Runner lets you run models locally behind an OpenAI-compatible REST API. This is useful if you already use OpenAI-style clients and want to swap in local models.
-
-- Official docs: https://docs.docker.com/ai/model-runner/
-
-High-level steps (refer to the docs for the exact image/flags and supported models):
-
-1) Ensure Docker Desktop is installed and up to date
-2) Start a model runner container that exposes an OpenAI-compatible API (commonly at `http://localhost:8080/v1`)
-3) Test with a simple request:
+### Development Workflow
 
 ```bash
-curl -s http://localhost:8080/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "llama3.2",
-    "messages": [{"role": "user", "content": "Write one API test idea for a blog service."}]
-  }'
+# Use free local models
+export LLM_PROVIDER=ollama
+ollama pull llama3.2
+
+# Generate test data
+jarvis gen generate-testdata --spec api.yaml --count 20
+
+# Run tests, record traffic
+jarvis proxy --record
+
+# Analyze failures
+jarvis analyze analyze-failures
 ```
 
-Notes:
-- Jarvis currently integrates natively with Ollama. If you prefer Docker Model Runner, you can run it side-by-side for local experimentation or wire it into your own scripts/tools that use the OpenAI API format.
-- An OpenAI-compatible client option for Jarvis is a potential future enhancement; contributions welcome.
+### CI/CD Workflow
+
+```bash
+# Use cost-effective cloud model
+export LLM_PROVIDER=google
+export GOOGLE_API_KEY="$GOOGLE_API_KEY"
+
+# Generate and validate
+jarvis gen generate-testdata --spec api.yaml
+jarvis proxy --api-validate --api-spec api.yaml
 ```
+
+### Production Workflow
+
+```bash
+# Use high-quality models for critical analysis
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+
+# Deep failure analysis
+jarvis analyze analyze-failures --limit 10 --output report.json
+```
+
+## Examples
+
+### Complete Testing Workflow
+
+```bash
+# 1. Generate test data
+jarvis gen generate-testdata --spec petstore.yaml --output testdata/
+
+# 2. Start proxy in record mode
+jarvis proxy --record --api-validate --api-spec petstore.yaml &
+
+# 3. Run your tests (using generated test data)
+# npm test / pytest / go test
+
+# 4. Analyze failures
+jarvis analyze analyze-failures --time-window 1h --output failures.json
+
+# 5. Review report
+cat failures.json | jq '.[] | {endpoint: .url, cause: .analysis.root_cause}'
+```
+
+### Multi-Provider Usage
+
+```bash
+# Generate test data locally (free)
+export LLM_PROVIDER=ollama
+jarvis gen generate-testdata --spec api.yaml --count 50
+
+# Analyze failures with Claude (best quality)
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+jarvis analyze analyze-failures --limit 5
+
+# Generate scenarios with Gemini (cost-effective)
+export LLM_PROVIDER=google
+export GOOGLE_API_KEY="AIza..."
+jarvis gen generate-scenarios --path specs/
+```
+
+## Performance
+
+- **Binary Size**: ~48 MB
+- **Memory Usage**: ~100 MB (base) + AI model overhead
+- **AI Response Time**:
+  - Local (Ollama): 1-5 seconds
+  - Cloud: 0.5-3 seconds
+- **Proxy Throughput**: 1000+ req/sec
 
 ## Contributing
 
-We welcome contributions! Please see our PR template for more details.
+We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md).
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/dipjyotimetia/jarvis.git
+cd jarvis
+
+# Install dependencies
+go mod download
+
+# Build
+go build -o jarvis
+
+# Run tests
+go test ./...
+```
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Documentation**: See `docs/` directory
+- **Issues**: https://github.com/dipjyotimetia/jarvis/issues
+- **Discussions**: https://github.com/dipjyotimetia/jarvis/discussions
+
+---
+
+**Made with ❤️ for API testers and developers**

@@ -9,41 +9,54 @@ import (
 	"time"
 
 	"github.com/dipjyotimetia/jarvis/internal/db"
-	"github.com/dipjyotimetia/jarvis/pkg/engine/ollama"
+	"github.com/dipjyotimetia/jarvis/pkg/engine/llm"
 )
 
 // FailureAnalyzer analyzes API failures and provides AI-powered diagnosis
 type FailureAnalyzer struct {
-	aiClient ollama.Client
-	database *sql.DB
+	llmClient *llm.Client
+	database  *sql.DB
 }
 
-// New creates a new failure analyzer
+// New creates a new failure analyzer with default LLM client
 func New(ctx context.Context, database *sql.DB) (*FailureAnalyzer, error) {
-	aiClient, err := ollama.New(ctx)
+	llmClient, err := llm.NewFromEnv(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AI client: %w", err)
+		return nil, fmt.Errorf("failed to create LLM client: %w", err)
 	}
 
 	return &FailureAnalyzer{
-		aiClient: aiClient,
-		database: database,
+		llmClient: llmClient,
+		database:  database,
+	}, nil
+}
+
+// NewWithConfig creates a new failure analyzer with custom LLM configuration
+func NewWithConfig(ctx context.Context, database *sql.DB, config llm.Config) (*FailureAnalyzer, error) {
+	llmClient, err := llm.New(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LLM client: %w", err)
+	}
+
+	return &FailureAnalyzer{
+		llmClient: llmClient,
+		database:  database,
 	}, nil
 }
 
 // FailureReport represents a failure analysis report
 type FailureReport struct {
-	ID              string                 `json:"id"`
-	URL             string                 `json:"url"`
-	Method          string                 `json:"method"`
-	StatusCode      int                    `json:"status_code"`
-	Timestamp       time.Time              `json:"timestamp"`
-	RequestHeaders  map[string]interface{} `json:"request_headers"`
-	RequestBody     string                 `json:"request_body"`
-	ResponseHeaders map[string]interface{} `json:"response_headers"`
-	ResponseBody    string                 `json:"response_body"`
-	Duration        int64                  `json:"duration_ms"`
-	Analysis        AnalysisResult         `json:"analysis"`
+	ID              string            `json:"id"`
+	URL             string            `json:"url"`
+	Method          string            `json:"method"`
+	StatusCode      int               `json:"status_code"`
+	Timestamp       time.Time         `json:"timestamp"`
+	RequestHeaders  map[string]any    `json:"request_headers"`
+	RequestBody     string            `json:"request_body"`
+	ResponseHeaders map[string]any    `json:"response_headers"`
+	ResponseBody    string            `json:"response_body"`
+	Duration        int64             `json:"duration_ms"`
+	Analysis        AnalysisResult    `json:"analysis"`
 }
 
 // AnalysisResult contains AI-powered analysis of a failure
@@ -124,7 +137,7 @@ func (fa *FailureAnalyzer) AnalyzeFailures(ctx context.Context, opts AnalysisOpt
 		}
 
 		// Parse headers
-		var reqHeadersMap, respHeadersMap map[string]interface{}
+		var reqHeadersMap, respHeadersMap map[string]any
 		json.Unmarshal([]byte(reqHeaders), &reqHeadersMap)
 		json.Unmarshal([]byte(respHeaders), &respHeadersMap)
 
@@ -167,23 +180,23 @@ type AnalysisOptions struct {
 func (fa *FailureAnalyzer) analyzeFailure(
 	ctx context.Context,
 	record db.TrafficRecord,
-	reqHeaders, respHeaders map[string]interface{},
+	reqHeaders, respHeaders map[string]any,
 ) (AnalysisResult, error) {
 	prompt := fa.buildAnalysisPrompt(record, reqHeaders, respHeaders)
 
-	response, err := fa.aiClient.GenerateText(ctx, prompt)
+	response, err := fa.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return AnalysisResult{}, fmt.Errorf("AI analysis failed: %w", err)
 	}
 
 	// Parse AI response
-	return fa.parseAnalysisResponse(response.Response)
+	return fa.parseAnalysisResponse(response)
 }
 
 // buildAnalysisPrompt creates a detailed prompt for AI analysis
 func (fa *FailureAnalyzer) buildAnalysisPrompt(
 	record db.TrafficRecord,
-	reqHeaders, respHeaders map[string]interface{},
+	reqHeaders, respHeaders map[string]any,
 ) string {
 	var builder strings.Builder
 

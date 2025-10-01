@@ -6,24 +6,36 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dipjyotimetia/jarvis/pkg/engine/ollama"
+	"github.com/dipjyotimetia/jarvis/pkg/engine/llm"
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 // Generator handles AI-powered test data generation
 type Generator struct {
-	aiClient ollama.Client
+	llmClient *llm.Client
 }
 
-// New creates a new test data generator
+// New creates a new test data generator with default LLM client
 func New(ctx context.Context) (*Generator, error) {
-	aiClient, err := ollama.New(ctx)
+	llmClient, err := llm.NewFromEnv(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AI client: %w", err)
+		return nil, fmt.Errorf("failed to create LLM client: %w", err)
 	}
 
 	return &Generator{
-		aiClient: aiClient,
+		llmClient: llmClient,
+	}, nil
+}
+
+// NewWithConfig creates a new test data generator with custom LLM configuration
+func NewWithConfig(ctx context.Context, config llm.Config) (*Generator, error) {
+	llmClient, err := llm.New(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LLM client: %w", err)
+	}
+
+	return &Generator{
+		llmClient: llmClient,
 	}, nil
 }
 
@@ -91,13 +103,13 @@ func (g *Generator) generateForOperation(
 	prompt := g.buildPromptForOperation(path, method, operation, doc, opts)
 
 	// Generate test data using AI
-	response, err := g.aiClient.GenerateText(ctx, prompt)
+	response, err := g.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return TestDataResult{}, fmt.Errorf("AI generation failed: %w", err)
 	}
 
 	// Parse AI response into structured test data
-	testCases, err := g.parseAIResponse(response.Response)
+	testCases, err := g.parseAIResponse(response)
 	if err != nil {
 		return TestDataResult{}, fmt.Errorf("failed to parse AI response: %w", err)
 	}
@@ -223,12 +235,12 @@ Requirements:
 Return ONLY a JSON array of test data objects matching the schema.
 No additional text or explanation.`
 
-	response, err := g.aiClient.GenerateText(ctx, prompt)
+	response, err := g.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("AI generation failed: %w", err)
 	}
 
-	return g.parseAIResponse(response.Response)
+	return g.parseAIResponse(response)
 }
 
 // GenerateFromExample generates variations of test data from an example
@@ -241,10 +253,10 @@ Generate %d similar but different variations of this data.
 Keep the same structure but vary the values realistically.
 Return ONLY a JSON array of objects, no additional text.`, exampleJSON, count)
 
-	response, err := g.aiClient.GenerateText(ctx, prompt)
+	response, err := g.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("AI generation failed: %w", err)
 	}
 
-	return g.parseAIResponse(response.Response)
+	return g.parseAIResponse(response)
 }
