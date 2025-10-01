@@ -24,20 +24,14 @@ no-dirty:
 # Performance and benchmarking targets
 .PHONY: bench
 bench:
-	@echo "Running benchmarks for proxy and pact components..."
+	@echo "Running benchmarks for proxy and ollama components..."
 	go test -bench=. -benchmem -run=^$$ ./internal/proxy/...
-	go test -bench=. -benchmem -run=^$$ ./pkg/engine/pact/...
 	go test -bench=. -benchmem -run=^$$ ./pkg/engine/ollama/...
 
 .PHONY: bench-proxy
 bench-proxy:
 	@echo "Running proxy benchmarks..."
 	go test -bench=. -benchmem -run=^$$ ./internal/proxy/...
-
-.PHONY: bench-pact
-bench-pact:
-	@echo "Running pact engine benchmarks..."
-	go test -bench=. -benchmem -run=^$$ ./pkg/engine/pact/...
 
 .PHONY: bench-ollama
 bench-ollama:
@@ -67,7 +61,6 @@ profile-web:
 test-performance:
 	@echo "Running performance regression tests..."
 	go test -tags=performance -timeout=10m ./internal/proxy/...
-	go test -tags=performance -timeout=10m ./pkg/engine/pact/...
 
 .PHONY: bench-compare
 bench-compare:
