@@ -71,9 +71,12 @@ func init() {
 	// Add commands to groups
 	genGroup.AddCommand(commands.GenerateTestModule())
 	genGroup.AddCommand(commands.GenerateTestScenarios())
-	genGroup.AddCommand(commands.GenerateContractsModule())
+	genGroup.AddCommand(commands.GenerateTestDataCommand())
+	genGroup.AddCommand(commands.GenerateFromSchemaCommand())
 
 	analyzeGroup.AddCommand(commands.SpecAnalyzer())
+	analyzeGroup.AddCommand(commands.AnalyzeFailuresCommand())
+	analyzeGroup.AddCommand(commands.AnalyzeEndpointCommand())
 
 	toolsGroup.AddCommand(commands.GrpcCurlGenerator())
 
