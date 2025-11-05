@@ -1,7 +1,24 @@
 version: 2
 
+# Project metadata
+project_name: jarvis
+
+# Environment variables
+env:
+  - GO111MODULE=on
+
+# Before hooks - run before building
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+# Build configuration
 builds:
-  - env:
+  - id: jarvis
+    main: .
+    binary: jarvis
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -10,36 +27,224 @@ builds:
     goarch:
       - amd64
       - arm64
-    ldflags:
-      - -s -w -X cmd.Version={{ .Version }}
-      - -X cmd.Commit={{ .Commit }}
-      - -X cmd.BuildDate={{ .Date }}
+      - arm
+    goarm:
+      - "7"
+    # Ignore combinations that don't make sense
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: darwin
+        goarch: arm
 
+    # Optimized build flags
+    ldflags:
+      - -s -w
+      - -X github.com/dipjyotimetia/jarvis/cmd.Version={{ .Version }}
+      - -X github.com/dipjyotimetia/jarvis/cmd.Commit={{ .Commit }}
+      - -X github.com/dipjyotimetia/jarvis/cmd.BuildDate={{ .Date }}
+      - -X github.com/dipjyotimetia/jarvis/cmd.BuiltBy=goreleaser
+
+    # Build flags
+    flags:
+      - -trimpath
+      - -mod=readonly
+
+    # Build mode
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+# Archive configuration
 archives:
-  - formats: [ 'tar.gz' ]
-    # this name template makes the OS and Arch compatible with the results of `uname`.
+  - id: jarvis-archive
+    builds:
+      - jarvis
+    format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
+      {{ .Version }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
+
+    # Use zip for Windows
     format_overrides:
       - goos: windows
-        formats: [ 'zip' ]
+        format: zip
 
+    # Files to include in archive
+    files:
+      - README.md
+      - LICENSE
+      - OPTIMIZATIONS.md
+      - TESTING.md
+      - docs/**/*
+      - config.yaml
+
+# Checksums
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Snapshots (for non-tag builds)
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+# Changelog configuration
 changelog:
   sort: asc
+  use: github
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: 'Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Refactors'
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: 'Documentation'
+      regexp: '^.*?doc(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: Others
+      order: 999
 
+# Docker images
+dockers:
+  # AMD64 image
+  - id: jarvis-amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/dipjyotimetia/jarvis:{{ .Version }}-amd64"
+      - "ghcr.io/dipjyotimetia/jarvis:latest-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/dipjyotimetia/jarvis"
+      - "--label=org.opencontainers.image.description=AI-powered CLI tool for intelligent API testing"
+      - "--label=org.opencontainers.image.licenses=MIT"
+      - "--platform=linux/amd64"
+      - "--cache-from=type=gha"
+      - "--cache-to=type=gha,mode=max"
+    extra_files:
+      - config.yaml
+
+  # ARM64 image
+  - id: jarvis-arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/dipjyotimetia/jarvis:{{ .Version }}-arm64"
+      - "ghcr.io/dipjyotimetia/jarvis:latest-arm64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/dipjyotimetia/jarvis"
+      - "--label=org.opencontainers.image.description=AI-powered CLI tool for intelligent API testing"
+      - "--label=org.opencontainers.image.licenses=MIT"
+      - "--platform=linux/amd64"
+      - "--cache-from=type=gha"
+      - "--cache-to=type=gha,mode=max"
+    extra_files:
+      - config.yaml
+
+# Docker manifest for multi-arch support
+docker_manifests:
+  - name_template: "ghcr.io/dipjyotimetia/jarvis:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/dipjyotimetia/jarvis:{{ .Version }}-amd64"
+      - "ghcr.io/dipjyotimetia/jarvis:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/dipjyotimetia/jarvis:latest"
+    image_templates:
+      - "ghcr.io/dipjyotimetia/jarvis:latest-amd64"
+      - "ghcr.io/dipjyotimetia/jarvis:latest-arm64"
+
+# Release configuration
 release:
   github:
     owner: dipjyotimetia
     name: jarvis
-  prerelease: auto
+
+  # Release notes header
+  header: |
+    ## JARVIS {{ .Version }}
+
+    AI-Powered CLI for Intelligent API Testing
+
+    ### Installation
+
+    **Docker**:
+    ```bash
+    docker pull ghcr.io/dipjyotimetia/jarvis:{{ .Version }}
+    ```
+
+    **Manual Installation**:
+    Download the appropriate binary for your platform below.
+
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/dipjyotimetia/jarvis/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **Docker Images**:
+    - `ghcr.io/dipjyotimetia/jarvis:{{ .Version }}` (multi-arch)
+    - `ghcr.io/dipjyotimetia/jarvis:latest` (multi-arch)
+
+  # Don't create draft releases
   draft: false
+
+  # Auto-detect prerelease versions
+  prerelease: auto
+
+  # Make release notes publicly available
+  make_latest: true
+
+# SBOMs (Software Bill of Materials)
+sboms:
+  - id: archive
+    artifacts: archive
+  - id: binary
+    artifacts: binary
+
+# Metadata
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'
+
+# Git configuration
+git:
+  tag_sort: -version:refname
+
+# Universal Binaries for macOS
+universal_binaries:
+  - id: jarvis-darwin
+    name_template: 'jarvis'
+    replace: true
+    ids:
+      - jarvis

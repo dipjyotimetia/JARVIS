@@ -40,10 +40,13 @@ func Initialize(dbPath string) (*sql.DB, *sql.Stmt, error) {
 		return nil, nil, fmt.Errorf("opening SQLite database: %w", err)
 	}
 
-	// Set SQLite connection pool settings
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	// Set SQLite connection pool settings - optimized for concurrent operations
+	// WAL mode allows multiple readers, but only one writer
+	// Setting higher values improves concurrent read performance
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		return nil, nil, fmt.Errorf("pinging SQLite database: %w", err)
@@ -119,4 +122,64 @@ func setupDatabase(db *sql.DB) (*sql.Stmt, error) {
 
 	slog.Info("Database schema verified and statement prepared")
 	return stmt, nil
+}
+
+// BatchInsert performs batch insertion of traffic records for better performance
+func BatchInsert(db *sql.DB, records []TrafficRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	insertSQL := `INSERT INTO traffic_records (
+        id, timestamp, protocol, method, url, service,
+        request_headers, request_body, response_status,
+        response_headers, response_body, duration_ms,
+        client_ip, test_id, session_id, connection_id,
+        message_type, direction
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	stmt, err := tx.Prepare(insertSQL)
+	if err != nil {
+		return fmt.Errorf("preparing batch statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, record := range records {
+		_, err := stmt.Exec(
+			record.ID,
+			record.Timestamp,
+			record.Protocol,
+			record.Method,
+			record.URL,
+			record.Service,
+			record.RequestHeaders,
+			record.RequestBody,
+			record.ResponseStatus,
+			record.ResponseHeaders,
+			record.ResponseBody,
+			record.Duration,
+			record.ClientIP,
+			record.TestID,
+			record.SessionID,
+			record.ConnectionID,
+			record.MessageType,
+			record.Direction,
+		)
+		if err != nil {
+			return fmt.Errorf("executing batch insert: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing batch transaction: %w", err)
+	}
+
+	slog.Info("Batch inserted records", "count", len(records))
+	return nil
 }

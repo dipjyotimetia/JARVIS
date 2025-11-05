@@ -1,0 +1,51 @@
+# Dockerfile.goreleaser - Optimized for GoReleaser builds
+# This Dockerfile is used by GoReleaser to build Docker images
+
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add \
+    ca-certificates \
+    tzdata \
+    && update-ca-certificates
+
+# Create non-root user
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid 10001 \
+    jarvis
+
+# Set working directory
+WORKDIR /app
+
+# Copy the binary from GoReleaser
+COPY jarvis /usr/local/bin/jarvis
+
+# Copy config file
+COPY config.yaml /app/config.yaml
+
+# Set ownership
+RUN chown -R jarvis:jarvis /app
+
+# Switch to non-root user
+USER jarvis
+
+# Expose default ports
+# 8080 - HTTP proxy
+# 8443 - HTTPS proxy
+# 9090 - Web UI
+EXPOSE 8080 8443 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD jarvis version || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/jarvis"]
+
+# Default command
+CMD ["--help"]

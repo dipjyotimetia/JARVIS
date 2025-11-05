@@ -77,6 +77,7 @@ func init() {
 	analyzeGroup.AddCommand(commands.SpecAnalyzer())
 	analyzeGroup.AddCommand(commands.AnalyzeFailuresCommand())
 	analyzeGroup.AddCommand(commands.AnalyzeEndpointCommand())
+	analyzeGroup.AddCommand(commands.APIDiffCommand())
 
 	toolsGroup.AddCommand(commands.GrpcCurlGenerator())
 

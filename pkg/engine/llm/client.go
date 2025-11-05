@@ -3,8 +3,10 @@ package llm
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/anthropic"
@@ -12,6 +14,18 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/llms/openai"
 )
+
+// Global HTTP client with optimized settings for LLM API calls
+var httpClient = &http.Client{
+	Timeout: 60 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+		DisableCompression:  false,
+	},
+}
 
 // Provider represents the LLM provider type
 type Provider string
@@ -29,10 +43,12 @@ type Config struct {
 	Model       string
 	Temperature float64
 	MaxTokens   int
-	APIKey      string  // For cloud providers
-	BaseURL     string  // For Ollama or custom endpoints
+	APIKey      string        // For cloud providers
+	BaseURL     string        // For Ollama or custom endpoints
 	TopP        float64
 	TopK        int
+	Timeout     time.Duration // Timeout for API calls (default: 60s)
+	MaxRetries  int           // Maximum number of retries on failure (default: 3)
 }
 
 // Client provides a unified interface for multiple LLM providers
@@ -57,6 +73,12 @@ func New(ctx context.Context, config Config) (*Client, error) {
 	}
 	if config.MaxTokens == 0 {
 		config.MaxTokens = 2048
+	}
+	if config.Timeout == 0 {
+		config.Timeout = 60 * time.Second
+	}
+	if config.MaxRetries == 0 {
+		config.MaxRetries = 3
 	}
 
 	var llmInstance llms.Model
@@ -192,8 +214,12 @@ func getDefaultModel(provider Provider) string {
 	return defaults[provider]
 }
 
-// Generate generates text from a prompt
+// Generate generates text from a prompt with timeout and retry logic
 func (c *Client) Generate(ctx context.Context, prompt string, opts ...llms.CallOption) (string, error) {
+	// Create context with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
+
 	// Apply default options
 	defaultOpts := []llms.CallOption{
 		llms.WithTemperature(c.config.Temperature),
@@ -210,12 +236,33 @@ func (c *Client) Generate(ctx context.Context, prompt string, opts ...llms.CallO
 	// Merge with provided options
 	allOpts := append(defaultOpts, opts...)
 
-	result, err := llms.GenerateFromSinglePrompt(ctx, c.llm, prompt, allOpts...)
-	if err != nil {
-		return "", fmt.Errorf("generation failed: %w", err)
+	// Retry logic with exponential backoff
+	var result string
+	var err error
+	for attempt := 0; attempt < c.config.MaxRetries; attempt++ {
+		result, err = llms.GenerateFromSinglePrompt(timeoutCtx, c.llm, prompt, allOpts...)
+		if err == nil {
+			return result, nil
+		}
+
+		// Check if context was cancelled or timed out
+		if timeoutCtx.Err() != nil {
+			return "", fmt.Errorf("generation failed after timeout: %w", err)
+		}
+
+		// Exponential backoff for retries
+		if attempt < c.config.MaxRetries-1 {
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			select {
+			case <-time.After(backoff):
+				continue
+			case <-timeoutCtx.Done():
+				return "", fmt.Errorf("generation failed: %w", timeoutCtx.Err())
+			}
+		}
 	}
 
-	return result, nil
+	return "", fmt.Errorf("generation failed after %d attempts: %w", c.config.MaxRetries, err)
 }
 
 // GenerateStream generates text with streaming support
