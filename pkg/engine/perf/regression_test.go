@@ -61,7 +61,7 @@ func TestCheckAnomaly(t *testing.T) {
 			Timestamp: time.Now(),
 			Endpoint:  "/api/users",
 			Method:    "GET",
-			Latency:   150 * time.Millisecond, // 5 std devs above mean
+			Latency:   170 * time.Millisecond, // 7 std devs above mean (threshold*3 = 6)
 			Success:   true,
 		}
 
