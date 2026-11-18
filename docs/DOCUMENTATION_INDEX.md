@@ -7,11 +7,9 @@ Complete guide to all Jarvis documentation.
 ### Getting Started (Start Here!)
 
 1. **[README.md](../README.md)** - Main documentation
-   - Overview of Jarvis
-   - Feature highlights
-   - Quick start guide
-   - Installation instructions
-   - Basic usage examples
+   - Pitch, installation, and quick start
+   - Supported AI providers
+   - Links to the longer guides below
 
 2. **[Quick Start Guide](QUICK_START_LLM.md)** ⭐ *Best place to start*
    - 5-minute setup guide
@@ -73,6 +71,11 @@ Complete guide to all Jarvis documentation.
     - Common workflows
     - Best practices
 
+11. **[Commands](commands.md)** - CLI command tree
+12. **[AI features](ai-features.md)** - Test data, scenarios, and failure analysis
+13. **[Traffic inspector](traffic-inspector.md)** - Proxy, TLS, and OpenAPI validation
+14. **[Workflows](usage.md)** - End-to-end examples moved out of the README
+
 ## 📖 Documentation by Topic
 
 ### AI & LLM Features
@@ -89,10 +92,10 @@ Complete guide to all Jarvis documentation.
 
 | Topic | Document | Description |
 |-------|----------|-------------|
-| Traffic Inspector | [README.md](../README.md#traffic-inspector-proxy) | HTTP/HTTPS proxy features |
-| OpenAPI Validation | [README.md](../README.md#openapi-validation) | Real-time API validation |
-| Certificate Management | [README.md](../README.md#httpstls-support) | TLS/mTLS setup |
-| Configuration | [README.md](../README.md#configuration) | All configuration options |
+| Traffic Inspector | [traffic-inspector.md](traffic-inspector.md) | HTTP/HTTPS proxy features |
+| OpenAPI Validation | [traffic-inspector.md](traffic-inspector.md#openapi-validation) | Real-time API validation |
+| Certificate Management | [traffic-inspector.md](traffic-inspector.md#https-and-mtls) | TLS/mTLS setup |
+| Configuration | [setup.md](setup.md) | Setup and configuration |
 
 ### Advanced Topics
 
@@ -108,8 +111,8 @@ Complete guide to all Jarvis documentation.
 
 #### Get Started
 - **Install Jarvis** → [README.md - Installation](../README.md#installation)
-- **Set up AI providers** → [QUICK_START_LLM.md](QUICK_START_LLM.md)
-- **Run my first command** → [Quick Start Guide](QUICK_START_LLM.md#common-tasks)
+- **Set up AI providers** → [README.md - Supported providers](../README.md#supported-providers)
+- **Run my first command** → [README.md - Quick start](../README.md#quick-start)
 
 #### Use AI Features
 - **Generate test data** → [NEW_FEATURES.md - Test Data Generator](NEW_FEATURES.md#1-test-data-generator)
@@ -118,10 +121,10 @@ Complete guide to all Jarvis documentation.
 - **Configure AI settings** → [LLM_INTEGRATION.md - Configuration](LLM_INTEGRATION.md#configuration)
 
 #### Use Traffic Inspector
-- **Start proxy** → [README.md - Traffic Inspector](../README.md#traffic-inspector-proxy)
-- **Record traffic** → [README.md - Basic Usage](../README.md#basic-usage)
-- **Enable HTTPS** → [README.md - HTTPS/TLS Support](../README.md#httpstls-support)
-- **Validate APIs** → [README.md - OpenAPI Validation](../README.md#openapi-validation)
+- **Start proxy** → [Traffic inspector](traffic-inspector.md)
+- **Record traffic** → [Traffic inspector - Basic usage](traffic-inspector.md#basic-usage)
+- **Enable HTTPS** → [Traffic inspector - HTTPS and mTLS](traffic-inspector.md#https-and-mtls)
+- **Validate APIs** → [Traffic inspector - OpenAPI validation](traffic-inspector.md#openapi-validation)
 
 #### Troubleshoot
 - **AI provider issues** → [LLM_INTEGRATION.md - Troubleshooting](LLM_INTEGRATION.md#troubleshooting)
@@ -129,7 +132,7 @@ Complete guide to all Jarvis documentation.
 - **Migration issues** → [MIGRATION_SUMMARY.md - Troubleshooting](MIGRATION_SUMMARY.md#troubleshooting)
 
 #### Learn More
-- **See examples** → [example.md](example.md) or [README.md - Examples](../README.md#examples)
+- **See examples** → [example.md](example.md) or [Workflows](usage.md)
 - **Understand architecture** → [design.md](design.md)
 - **Read changelog** → [CHANGELOG.md](../CHANGELOG.md)
 
@@ -137,16 +140,13 @@ Complete guide to all Jarvis documentation.
 
 ### README.md
 **Audience**: Everyone
-**Length**: Comprehensive (~450 lines)
-**Purpose**: Main documentation and feature overview
+**Length**: Short landing page
+**Purpose**: Install, quick start, and supported providers
 
 **Key Sections**:
-- Feature highlights
 - Installation and quick start
-- AI-powered features
-- Traffic inspector
-- Configuration
-- Examples
+- Supported providers (OpenAI, Anthropic, Google Gemini, Ollama)
+- Links to [commands](commands.md), [AI features](ai-features.md), [traffic inspector](traffic-inspector.md), and [workflows](usage.md)
 
 ### QUICK_START_LLM.md
 **Audience**: New users
@@ -226,7 +226,7 @@ Complete guide to all Jarvis documentation.
 1. [README.md](../README.md) - Understand what Jarvis does
 2. [QUICK_START_LLM.md](QUICK_START_LLM.md) - Set up and run first commands
 3. [example.md](example.md) - See real examples
-4. [README.md - Examples](../README.md#examples) - More workflows
+4. [usage.md](usage.md) - Workflows moved out of the README
 
 ### Path 2: AI Features User
 1. [QUICK_START_LLM.md](QUICK_START_LLM.md) - Quick setup
@@ -295,7 +295,7 @@ jarvis version
 jarvis certificate --cert-dir ./certs
 ```
 
-See [README.md - Command Structure](../README.md#command-structure) for complete list.
+See [Commands](commands.md) for the full list.
 
 ## 📞 Support
 

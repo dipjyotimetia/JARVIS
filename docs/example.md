@@ -92,8 +92,6 @@ jarvis gen generate-scenarios --path="specs/"
 * Precondition: The API server is up and running.
 * Action: Send a request to an endpoint with a non-existent resource (e.g., a postId or userId that does not exist).
 * Expected Result: The server responds with a status code of 404 (Not Found) and an error message in the response body.
-```
-
 
 ### Generate Test Code
 
